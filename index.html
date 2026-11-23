@@ -2660,6 +2660,41 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             e.target.value = '';
         }
 
+        async function uploadPhotoToGoogleDrive(photo, listingId) {
+            const url = getActiveGdriveUrl();
+            if (!url) throw new Error('Google Apps Script 웹 앱 주소가 없습니다.');
+            if (!photo?.dataUrl || !String(photo.dataUrl).startsWith('data:')) return photo;
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'UPLOAD_PHOTO',
+                    listingId: listingId || 'listing',
+                    photo: {
+                        id: photo.id,
+                        name: photo.name,
+                        dataUrl: photo.dataUrl,
+                        isPrimary: !!photo.isPrimary
+                    }
+                })
+            });
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!data?.ok || !data.photo) {
+                throw new Error(data?.error || data?.message || 'Google Drive 사진 업로드 실패');
+            }
+
+            return {
+                ...photo,
+                dataUrl: data.photo.viewUrl || data.photo.dataUrl || '',
+                driveFileId: data.photo.driveFileId || data.photo.fileId || '',
+                driveUrl: data.photo.driveUrl || data.photo.fileUrl || '',
+                viewUrl: data.photo.viewUrl || data.photo.dataUrl || ''
+            };
+        }
+
         async function processUploadedPhotoFiles(fileList) {
             const files = Array.from(fileList).filter(f => f.type.startsWith('image/')).slice(0, 10 - tempFormPhotos.length);
             for (const file of files) {
@@ -2674,7 +2709,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.getElementById('photoCountBadge').textContent = `${tempFormPhotos.length}장 첨부됨 (최대 10장)`;
             grid.innerHTML = tempFormPhotos.map((ph, idx) => `
                 <div class="relative rounded-xl overflow-hidden border ${ph.isPrimary ? 'border-brand-600 ring-2 ring-brand-500/30' : 'border-slate-200'} bg-slate-100 aspect-[4/3]">
-                    <img src="${escapeHTML(ph.dataUrl)}" class="w-full h-full object-cover">
+                    <img src="${escapeHTML(ph.viewUrl || ph.dataUrl || '')}" class="w-full h-full object-cover">
                     ${ph.isPrimary ? `<span class="absolute top-1.5 left-1.5 px-2 py-0.5 text-[10px] font-bold bg-brand-600 text-white rounded-md">대표사진</span>` : `<button type="button" onclick="setFormPrimaryPhoto(${idx})" class="absolute top-1.5 left-1.5 px-2 py-0.5 text-[10px] font-semibold bg-black/65 text-white rounded-md">대표 지정</button>`}
                     <button type="button" onclick="removeFormPhoto(${idx})" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/65 hover:bg-rose-600 text-white flex items-center justify-center"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
                 </div>
@@ -2738,7 +2773,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         function updateLightboxView() {
             const current = lightboxPhotos[lightboxIndex];
             if (!current) return;
-            document.getElementById('lightboxImage').src = current.dataUrl;
+            document.getElementById('lightboxImage').src = current.viewUrl || current.dataUrl || '';
             document.getElementById('lightboxCounter').textContent = `${lightboxIndex + 1} / ${lightboxPhotos.length}`;
             document.getElementById('lightboxCaption').textContent = current.name || '매물 현장 사진';
         }
@@ -3128,7 +3163,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.getElementById('sqmPreview').textContent = `${pyeongToSqm(pyeongVal).toFixed(1)}㎡`;
         }
 
-        function saveProperty(e) {
+        async function saveProperty(e) {
             e.preventDefault();
             const editId = document.getElementById('formPropertyId').value;
             const customCode = (document.getElementById('formPropertyCode').value || '').trim();
@@ -3142,6 +3177,28 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
             const inputPyeong = parseFloat(document.getElementById('formAreaPyeong').value) || 0;
             const convertedSqm = pyeongToSqm(inputPyeong);
+
+            // 사진은 Base64를 Google Sheets에 저장하지 않고 Google Drive에 먼저 업로드합니다.
+            // 이미 Drive에 저장된 사진(driveFileId)은 그대로 유지합니다.
+            let finalPhotos = [];
+            try {
+                for (const photo of tempFormPhotos) {
+                    if (photo && photo.driveFileId) {
+                        finalPhotos.push({ ...photo, dataUrl: photo.viewUrl || photo.dataUrl || '' });
+                        continue;
+                    }
+                    if (photo && String(photo.dataUrl || '').startsWith('data:')) {
+                        showToast(`사진 업로드 중... (${finalPhotos.length + 1}/${tempFormPhotos.length})`);
+                        const uploaded = await uploadPhotoToGoogleDrive(photo, finalId);
+                        finalPhotos.push(uploaded);
+                    } else if (photo) {
+                        finalPhotos.push(photo);
+                    }
+                }
+            } catch (uploadErr) {
+                showToast(`사진 업로드 실패: ${uploadErr.message}`, 'error');
+                return;
+            }
 
             const payload = {
                 id: finalId,
@@ -3166,7 +3223,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 agent: document.getElementById('formAgent').value.trim(),
                 ownerContact: document.getElementById('formOwnerContact').value.trim(),
                 description: document.getElementById('formDescription').value.trim(),
-                photos: JSON.parse(JSON.stringify(tempFormPhotos))
+                photos: JSON.parse(JSON.stringify(finalPhotos))
             };
             let targetProp = null;
             if (editId) {
