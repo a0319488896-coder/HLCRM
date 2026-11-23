@@ -1365,7 +1365,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
         let pcFolderSyncTimer = null;
         const PC_DATA_FILE_NAME = 'hl_crm_data.json';
 
-        const EMBEDDED_SHARED_CONFIG = null;
+        const EMBEDDED_SHARED_CONFIG = { mode: 'gdrive', gdriveWebAppUrl: '여기에_주소_넣기', gdriveToken: '', supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos', baseUrl: 'https://api.my-server.kr', token: '', listingsEndpoint: '/api/listings', uploadEndpoint: '/api/upload' };
         let serverConfig = EMBEDDED_SHARED_CONFIG || {
             mode: 'local', gdriveWebAppUrl: '', gdriveToken: '',
             supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
