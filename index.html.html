@@ -1,0 +1,2896 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HL CRM | 상가·사무실 임대 매물 및 고객 관리</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Pretendard / Inter 스타일 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS SDK (직원 간 실시간 DB · 사진 스토리지 공유용) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans KR"', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#1e40af',
+                            700: '#1e3a8a',
+                            900: '#0f172a',
+                        },
+                        navy: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .slide-panel {
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .drop-zone-active {
+            border-color: #1e40af !important;
+            background-color: #eff6ff !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 상단 네비게이션 헤더 -->
+    <header class="bg-navy-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2.5 flex flex-wrap items-center justify-between gap-3">
+            <!-- 좌측 로고 및 브랜드 -->
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-brand-600 border border-blue-400/30 rounded-xl flex items-center justify-center text-white shadow-sm">
+                    <i data-lucide="building-2" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg font-bold text-white tracking-tight">HL CRM</h1>
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-950 text-blue-200 border border-blue-800">상업용 매물·고객 CRM</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden md:block">상가 · 사무실 · 지식산업센터 임대 매물 및 고객 문의 통합 관리</p>
+                </div>
+            </div>
+
+            <!-- 우측 권한 배지, 서버 설정, 데이터 관리 및 등록 버튼 그룹 -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- 현재 접속 권한 배지 & 관리자 잠금/해제 버튼 -->
+                <div class="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl p-1 gap-1">
+                    <span id="roleBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-200">
+                        <i data-lucide="user" class="w-3.5 h-3.5 text-slate-300"></i>
+                        <span id="roleBadgeText">일반 직원 모드</span>
+                    </span>
+                    <button type="button" id="adminToggleBtn" onclick="handleAdminToggle()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition">
+                        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                        <span>관리자 잠금 해제</span>
+                    </button>
+                </div>
+
+                <!-- 직원 계정 관리 버튼 -->
+                <button type="button" onclick="openStaffModal()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl transition" title="직원 가입 승인 및 계정 해제 관리">
+                    <i data-lucide="users" class="w-3.5 h-3.5 text-blue-400"></i>
+                    <span class="hidden sm:inline">직원 계정</span>
+                    <span id="pendingStaffCountBadge" class="hidden px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-rose-500 text-white">0</span>
+                </button>
+
+                <!-- 직원 로그인/가입 버튼 -->
+                <button type="button" onclick="openStaffPortalModal('login')" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl transition" title="직원 로그인 또는 가입 신청">
+                    <i data-lucide="log-in" class="w-3.5 h-3.5 text-emerald-400"></i>
+                    <span class="hidden md:inline">직원 로그인·가입</span>
+                </button>
+
+                <!-- 서버/저장소 상태 배지 & 설정 버튼 (항상 노출) -->
+                <button type="button" id="serverSettingsBtn" onclick="openServerModal()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 rounded-xl transition" title="저장소, 지정 서버(API) 및 관리자 비밀번호 설정">
+                    <span id="storageStatusDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <i data-lucide="server" class="w-3.5 h-3.5 text-blue-400"></i>
+                    <span>서버 설정</span>
+                    <span id="storageStatusLabel" class="hidden xl:inline text-[11px] text-slate-400 font-normal">· 로컬 저장 모드</span>
+                </button>
+                <!-- 내 PC 특정 폴더 직접 저장/연결 버튼 (관리자 전용) -->
+                <button type="button" id="pcFolderBtn" onclick="connectOrSyncPcFolder()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-blue-950/90 hover:bg-blue-900 text-blue-200 border border-blue-700/70 rounded-xl transition" title="관리자 전용: 내 PC 특정 폴더에 데이터 저장 및 불러오기">
+                    <i data-lucide="folder-sync" class="w-3.5 h-3.5 text-blue-300"></i>
+                    <span id="pcFolderLabel" class="hidden sm:inline">PC 폴더 저장</span>
+                    <i id="pcFolderLockIcon" data-lucide="lock" class="admin-lock-icon w-3 h-3 text-amber-300"></i>
+                </button>
+
+                <!-- 데이터 백업/내보내기/초기화 드롭다운 메뉴 -->
+                <div class="relative" id="dataMenuContainer">
+                    <button type="button" onclick="toggleDataMenu()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-200 bg-slate-800 border border-slate-700 rounded-xl hover:bg-slate-700 transition">
+                        <i data-lucide="database" class="w-3.5 h-3.5 text-slate-300"></i>
+                        <span class="hidden md:inline">데이터·엑셀</span>
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+                    </button>
+                    <div id="dataMenuDropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-40 text-slate-800">
+                        <div class="px-3.5 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                            <span>데이터 내보내기 및 백업</span>
+                            <span id="menuRoleHint" class="text-amber-600">관리자 잠금됨</span>
+                        </div>
+                        <button type="button" id="btnExportCSV" onclick="exportCSV()" class="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between transition">
+                            <span class="flex items-center gap-2.5">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+                                <span>엑셀(CSV) 내보내기</span>
+                            </span>
+                            <i data-lucide="lock" class="admin-lock-icon w-3.5 h-3.5 text-slate-400"></i>
+                        </button>
+                        <button type="button" id="btnExportJSON" onclick="exportJSON()" class="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between transition">
+                            <span class="flex items-center gap-2.5">
+                                <i data-lucide="download" class="w-4 h-4 text-brand-600"></i>
+                                <span>JSON 백업 파일 저장</span>
+                            </span>
+                            <i data-lucide="lock" class="admin-lock-icon w-3.5 h-3.5 text-slate-400"></i>
+                        </button>
+                        <div id="btnImportJSONWrapper" onclick="handleImportJSONClick()" class="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between cursor-pointer transition">
+                            <span class="flex items-center gap-2.5">
+                                <i data-lucide="upload" class="w-4 h-4 text-amber-600"></i>
+                                <span>JSON 백업 불러오기</span>
+                            </span>
+                            <i data-lucide="lock" class="admin-lock-icon w-3.5 h-3.5 text-slate-400"></i>
+                            <input type="file" id="jsonImportInput" accept=".json" class="hidden" onchange="importJSON(event)">
+                        </div>
+                        <div class="my-1 border-t border-slate-100"></div>
+                        <button type="button" id="btnResetSample" onclick="handleResetSampleClick()" class="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between transition">
+                            <span class="flex items-center gap-2.5 text-rose-600">
+                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                                <span>샘플 데이터로 초기화</span>
+                            </span>
+                            <i data-lucide="lock" class="admin-lock-icon w-3.5 h-3.5 text-slate-400"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 새 매물 등록 버튼 -->
+                <button type="button" onclick="openPropertyModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-500 shadow-sm transition">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>매물 등록</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 업무 필수 공공·부동산 포털 바로가기 배너 -->
+        <div class="bg-navy-950/90 border-t border-slate-800/90">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 overflow-x-auto">
+                <span class="text-[11px] font-semibold text-slate-400 shrink-0 flex items-center gap-1 mr-1">
+                    <i data-lucide="external-link" class="w-3 h-3 text-blue-400"></i>
+                    <span>바로가기</span>
+                </span>
+                <a href="https://www.iros.go.kr" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-blue-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="인터넷등기소 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-blue-500/20 text-blue-300 flex items-center justify-center">
+                        <i data-lucide="landmark" class="w-3 h-3"></i>
+                    </span>
+                    <span>인터넷등기소</span>
+                </a>
+                <a href="https://plus.gov.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-sky-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="정부24 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-sky-500/20 text-sky-300 flex items-center justify-center">
+                        <i data-lucide="building" class="w-3 h-3"></i>
+                    </span>
+                    <span>정부24</span>
+                </a>
+                <a href="https://realty.daangn.com/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-orange-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="당근부동산 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-orange-500/20 text-orange-300 flex items-center justify-center">
+                        <i data-lucide="map-pin" class="w-3 h-3"></i>
+                    </span>
+                    <span>당근부동산</span>
+                </a>
+                <a href="https://www.eum.go.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-emerald-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="토지이음 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+                        <i data-lucide="map" class="w-3 h-3"></i>
+                    </span>
+                    <span>토지이음</span>
+                </a>
+                <a href="https://www.law.go.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-indigo-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="법제처 국가법령정보센터 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
+                        <i data-lucide="scale" class="w-3 h-3"></i>
+                    </span>
+                    <span>법제처</span>
+                </a>
+                <a href="https://www.hometax.go.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-teal-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="국세청 홈택스 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-teal-500/20 text-teal-300 flex items-center justify-center">
+                        <i data-lucide="receipt-text" class="w-3 h-3"></i>
+                    </span>
+                    <span>홈택스</span>
+                </a>
+                <a href="https://bigdata.sbiz.or.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-violet-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="소상공인365 상권분석 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-violet-500/20 text-violet-300 flex items-center justify-center">
+                        <i data-lucide="bar-chart-3" class="w-3 h-3"></i>
+                    </span>
+                    <span>소상공인365</span>
+                </a>
+                <a href="https://www.kar.or.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-amber-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="한국공인중개사협회 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                        <i data-lucide="award" class="w-3 h-3"></i>
+                    </span>
+                    <span>한국공인중개사협회</span>
+                </a>
+                <a href="https://realtorscan.kr/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-violet-900/60 text-slate-200 hover:text-white border border-slate-700/80 text-xs font-medium shrink-0 transition" title="중개스캔 새 창 열기">
+                    <span class="w-5 h-5 rounded-md bg-violet-500/20 text-violet-300 flex items-center justify-center">
+                        <i data-lucide="scan-search" class="w-3 h-3"></i>
+                    </span>
+                    <span>중개스캔</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- 메인 업무 탭 전환 바 (매물 관리 / 고객 관리 리스트) -->
+        <div class="bg-navy-900 border-t border-slate-800/80">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-2 pt-1.5">
+                <button type="button" id="mainTabPropertiesBtn" onclick="switchMainWorkspaceTab('properties')" class="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition">
+                    <i data-lucide="building-2" class="w-4 h-4 text-brand-600"></i>
+                    <span>매물 관리</span>
+                    <span id="navPropCountBadge" class="px-1.5 py-0.5 text-[11px] rounded-full bg-brand-100 text-brand-700">0</span>
+                </button>
+                <button type="button" id="mainTabCustomersBtn" onclick="switchMainWorkspaceTab('customers')" class="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition">
+                    <i data-lucide="contact-round" class="w-4 h-4 text-emerald-400"></i>
+                    <span>고객 관리 리스트</span>
+                    <span id="navCustomerCountBadge" class="px-1.5 py-0.5 text-[11px] rounded-full bg-slate-700 text-slate-200">0</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- ========================================================= -->
+        <!-- [워크스페이스 1] 상가·사무실 임대 매물 관리 영역 -->
+        <!-- ========================================================= -->
+        <div id="propertiesWorkspace" class="space-y-6">
+            <!-- 1. 상단 대시보드 요약 카드 -->
+            <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div onclick="quickFilterStatus('ALL')" class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:border-brand-300 cursor-pointer transition group">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">전체 등록 매물</span>
+                        <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center group-hover:bg-brand-50 group-hover:text-brand-600 transition">
+                            <i data-lucide="layers" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="statTotal" class="text-2xl sm:text-3xl font-bold text-slate-900">0</span>
+                        <span class="text-xs text-slate-500">건</span>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-400">클릭 시 전체 보기</p>
+                </div>
+
+                <div onclick="quickFilterStatus('계약가능')" class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:border-emerald-300 cursor-pointer transition group">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">계약가능 (공실/입주협의)</span>
+                        <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="statAvailable" class="text-2xl sm:text-3xl font-bold text-emerald-600">0</span>
+                        <span class="text-xs text-slate-500">건</span>
+                    </div>
+                    <p class="mt-1 text-xs text-emerald-600/80">즉시 브리핑 가능 매물</p>
+                </div>
+
+                <div onclick="quickFilterStatus('협의중')" class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:border-amber-300 cursor-pointer transition group">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">조건 협의중</span>
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                            <i data-lucide="clock" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="statNegotiating" class="text-2xl sm:text-3xl font-bold text-amber-600">0</span>
+                        <span class="text-xs text-slate-500">건</span>
+                    </div>
+                    <p class="mt-1 text-xs text-amber-600/80">임대료·가계약 조율 진행</p>
+                </div>
+
+                <div onclick="quickFilterStatus('계약완료')" class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:border-slate-400 cursor-pointer transition group">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">계약완료</span>
+                        <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                            <i data-lucide="file-check" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="statCompleted" class="text-2xl sm:text-3xl font-bold text-slate-700">0</span>
+                        <span class="text-xs text-slate-500">건</span>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-400">계약 체결 완료 이력</p>
+                </div>
+            </section>
+
+            <!-- 2. 검색 및 다중 필터 바 -->
+            <section class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col lg:flex-row gap-3">
+                    <div class="relative flex-1">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="매물명, 건물명, 주소(구/동), 추천업종, 담당자, 메모 검색..." class="w-full pl-10 pr-9 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                        <button type="button" id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <i data-lucide="x-circle" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 lg:w-auto">
+                        <select id="filterType" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="ALL">유형: 전체</option>
+                            <option value="상가">상가</option>
+                            <option value="원룸">원룸</option>
+                            <option value="주택">주택</option>
+                        </select>
+
+                        <select id="filterStatus" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="ALL">상태: 전체</option>
+                            <option value="계약가능">계약가능</option>
+                            <option value="협의중">협의중</option>
+                            <option value="계약완료">계약완료</option>
+                            <option value="타부동산">타부동산</option>
+                            <option value="보류">보류</option>
+                        </select>
+
+                        <select id="filterFloor" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="ALL">층수: 전체</option>
+                            <option value="1F">1층 (로드샵)</option>
+                            <option value="UPPER">지상층 (2층 이상)</option>
+                            <option value="BASEMENT">지하층 (B1 이하)</option>
+                        </select>
+
+                        <select id="sortBy" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="NEWEST">정렬: 최신등록순</option>
+                            <option value="RENT_ASC">정렬: 월세 낮은순</option>
+                            <option value="RENT_DESC">정렬: 월세 높은순</option>
+                            <option value="AREA_DESC">정렬: 면적 넓은순</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                        <span class="text-slate-500 font-medium">빠른 예산 필터:</span>
+                        <button type="button" onclick="setMaxRentFilter(null)" data-rent-btn="ALL" class="rent-chip px-2.5 py-1 rounded-lg bg-brand-600 text-white font-medium transition">전체</button>
+                        <button type="button" onclick="setMaxRentFilter(150)" data-rent-btn="150" class="rent-chip px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">월세 150만 이하</button>
+                        <button type="button" onclick="setMaxRentFilter(300)" data-rent-btn="300" class="rent-chip px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">월세 300만 이하</button>
+                        <button type="button" onclick="setMaxRentFilter(500)" data-rent-btn="500" class="rent-chip px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">월세 500만 이하</button>
+                        <button type="button" onclick="resetAllFilters()" class="ml-1 text-slate-400 hover:text-slate-700 underline">필터 초기화</button>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-500">검색 결과 <strong id="filteredCount" class="text-slate-900">0</strong>건</span>
+                        <div class="inline-flex rounded-xl bg-slate-100 p-1">
+                            <button type="button" id="viewTableBtn" onclick="setViewMode('table')" class="p-1.5 rounded-lg bg-white text-slate-800 shadow-sm transition" title="목록(테이블) 보기">
+                                <i data-lucide="list" class="w-4 h-4"></i>
+                            </button>
+                            <button type="button" id="viewCardBtn" onclick="setViewMode('card')" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 transition" title="카드 보기">
+                                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. 매물 목록 조회 영역 -->
+            <section id="propertyListContainer">
+                <div id="tableViewWrapper" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                    <th class="py-3.5 px-4">매물번호</th>
+                                    <th class="py-3.5 px-4">사진 · 유형/상태</th>
+                                    <th class="py-3.5 px-4">매물명 · 위치</th>
+                                    <th class="py-3.5 px-4">층수 · 전용면적</th>
+                                    <th class="py-3.5 px-4">보증금 / 월세 (관리비)</th>
+                                    <th class="py-3.5 px-4 hidden md:table-cell">권리금 · 주차</th>
+                                    <th class="py-3.5 px-4 hidden lg:table-cell">광고 · 추천업종</th>
+                                    <th class="py-3.5 px-4 text-right">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="propertyTableBody" class="divide-y divide-slate-100 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="cardViewWrapper" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+                <div id="emptyState" class="hidden bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                    <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                        <i data-lucide="search-x" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-base font-semibold text-slate-800">조건에 일치하는 매물이 없습니다</h3>
+                    <p class="text-sm text-slate-500 mt-1">검색어나 필터 조건을 변경하거나 새 매물을 등록해 보세요.</p>
+                    <button type="button" onclick="resetAllFilters()" class="mt-4 px-4 py-2 text-sm font-medium text-brand-600 bg-brand-50 rounded-xl hover:bg-brand-100 transition">
+                        모든 필터 초기화
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- [워크스페이스 2] 고객 관리 리스트 영역 -->
+        <!-- ========================================================= -->
+        <div id="customersWorkspace" class="hidden space-y-6">
+            <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">전체 문의 고객</span>
+                        <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">
+                            <i data-lucide="users" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="custStatTotal" class="text-2xl sm:text-3xl font-bold text-slate-900">0</span>
+                        <span class="text-xs text-slate-500">명</span>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-400">등록된 문의 고객 현황</p>
+                </div>
+
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">상가·창업 문의</span>
+                        <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <i data-lucide="store" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="custStatStore" class="text-2xl sm:text-3xl font-bold text-emerald-600">0</span>
+                        <span class="text-xs text-slate-500">명</span>
+                    </div>
+                    <p class="mt-1 text-xs text-emerald-600/80">카페·외식·판매·학원 등</p>
+                </div>
+
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">사무실·사옥 문의</span>
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <i data-lucide="briefcase" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="custStatOffice" class="text-2xl sm:text-3xl font-bold text-indigo-600">0</span>
+                        <span class="text-xs text-slate-500">명</span>
+                    </div>
+                    <p class="mt-1 text-xs text-indigo-600/80">오피스·법인·지산 수요</p>
+                </div>
+
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs sm:text-sm font-medium text-slate-500">즉시·1개월 내 입주</span>
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                            <i data-lucide="calendar-check" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-baseline gap-1.5">
+                        <span id="custStatUrgent" class="text-2xl sm:text-3xl font-bold text-amber-600">0</span>
+                        <span class="text-xs text-slate-500">명</span>
+                    </div>
+                    <p class="mt-1 text-xs text-amber-600/80">우선 매물 매칭 대상</p>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" id="customerSearchInput" oninput="renderCustomersList()" placeholder="담당자, 연락처, 최초문의매물, 우선순위, 선호지역, 업종, 필수조건, 기타 검색..." class="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+                </div>
+                <div class="flex flex-wrap items-center justify-between md:justify-end gap-2.5">
+                    <select id="customerPriorityFilter" onchange="renderCustomersList()" class="px-3 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <option value="ALL">우선순위: 전체</option>
+                        <option value="1순위">1순위</option>
+                        <option value="2순위">2순위</option>
+                        <option value="3순위">3순위</option>
+                        <option value="보류">보류</option>
+                    </select>
+                    <span class="text-xs text-slate-500">고객 <strong id="customerFilteredCount" class="text-slate-900">0</strong>명</span>
+                    <button type="button" onclick="openCustomerModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 shadow-sm transition shrink-0">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i>
+                        <span>고객 등록</span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                                <th class="py-3.5 px-3.5">우선순위</th>
+                                <th class="py-3.5 px-3.5">담당자</th>
+                                <th class="py-3.5 px-3.5">연락처</th>
+                                <th class="py-3.5 px-3.5">최초문의매물</th>
+                                <th class="py-3.5 px-3.5">최초문의일</th>
+                                <th class="py-3.5 px-3.5">보증금</th>
+                                <th class="py-3.5 px-3.5">월세</th>
+                                <th class="py-3.5 px-3.5">권리금</th>
+                                <th class="py-3.5 px-3.5">층수</th>
+                                <th class="py-3.5 px-3.5">평수</th>
+                                <th class="py-3.5 px-3.5">선호지역</th>
+                                <th class="py-3.5 px-3.5">입주예정일</th>
+                                <th class="py-3.5 px-3.5">업종</th>
+                                <th class="py-3.5 px-3.5">필수조건</th>
+                                <th class="py-3.5 px-3.5">기타</th>
+                                <th class="py-3.5 px-3.5 text-right sticky right-0 bg-slate-50/95">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <div id="customerEmptyState" class="hidden p-12 text-center">
+                    <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                        <i data-lucide="user-x" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-base font-semibold text-slate-800">등록된 고객이 없거나 검색 결과가 없습니다</h3>
+                    <p class="text-sm text-slate-500 mt-1">새 고객을 등록하거나 다른 키워드로 검색해 보세요.</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 고객 등록 / 수정 모달 -->
+    <div id="customerModalBackdrop" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-[1px] z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div>
+                    <h2 id="customerModalTitle" class="text-lg font-bold text-slate-900">새 고객 등록</h2>
+                    <p class="text-xs text-slate-500">문의 고객의 희망 조건과 상담 내역을 입력하세요</p>
+                </div>
+                <button type="button" onclick="closeCustomerModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="customerForm" onsubmit="saveCustomer(event)" class="flex-1 overflow-y-auto p-6 space-y-4">
+                <input type="hidden" id="custFormId">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">우선순위 *</label>
+                        <select id="custPriority" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="1순위">1순위</option>
+                            <option value="2순위">2순위</option>
+                            <option value="3순위">3순위</option>
+                            <option value="보류">보류</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">담당자 *</label>
+                        <input type="text" id="custManager" required placeholder="예: 김현우 소장 또는 고객명" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">연락처 *</label>
+                        <input type="text" id="custPhone" required placeholder="예: 010-1234-5678" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">최초문의매물</label>
+                        <input type="text" id="custFirstProperty" list="propertyDatalist" placeholder="예: 일산 라페스타 1층 코너 상가" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <datalist id="propertyDatalist"></datalist>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">최초문의일</label>
+                        <input type="date" id="custInquiryDate" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">보증금</label>
+                        <input type="text" id="custDeposit" placeholder="예: 5,000만 / 1억" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">월세</label>
+                        <input type="text" id="custRent" placeholder="예: 300만 이하" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">권리금</label>
+                        <input type="text" id="custPremium" placeholder="예: 무권리 또는 2,000만 이하" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">층수</label>
+                        <input type="text" id="custFloor" placeholder="예: 1층 또는 지상 2~5층" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">평수</label>
+                        <input type="text" id="custAreaPyeong" placeholder="예: 전용 20~30평" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">선호지역</label>
+                        <input type="text" id="custPreferredArea" placeholder="예: 고양시 일산동구, 파주 운정" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">입주예정일</label>
+                        <input type="text" id="custMoveInDate" placeholder="예: 즉시입주 / 2026년 12월 말" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">업종</label>
+                        <input type="text" id="custIndustry" placeholder="예: 카페, 사무실, 병의원, 학원" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">필수조건</label>
+                        <input type="text" id="custRequiredCond" placeholder="예: 주차 2대 필수, 냉난방기 설치, 전면 간판 가능" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">기타</label>
+                        <textarea id="custEtc" rows="2" placeholder="상담 메모, 방문 일정, 특이사항 등" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeCustomerModal()" class="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition">취소</button>
+                    <button type="submit" class="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 shadow-sm transition">저장하기</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 우측 상세 슬라이드 패널 -->
+    <div id="detailDrawerBackdrop" onclick="closeDetailDrawer()" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-[1px] z-40 transition-opacity"></div>
+    <aside id="detailDrawer" class="fixed top-0 right-0 h-full w-full max-w-xl bg-white shadow-2xl border-l border-slate-200 z-50 transform translate-x-full slide-panel flex flex-col">
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+            <div class="flex items-center gap-2.5">
+                <span id="drawerTypeBadge" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-brand-100 text-brand-700">상가</span>
+                <span id="drawerIdText" class="text-xs text-slate-400 font-mono">#P-001</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button type="button" id="drawerEditBtn" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                    <span>정보 수정</span>
+                </button>
+                <button type="button" id="drawerDeleteBtn" class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 transition" title="매물 삭제">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+                <button type="button" onclick="closeDetailDrawer()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 ml-1">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+        <div id="drawerContent" class="flex-1 overflow-y-auto p-6 space-y-6"></div>
+    </aside>
+
+    <!-- 매물 등록 / 수정 모달 -->
+    <div id="propertyModalBackdrop" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-[1px] z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div>
+                    <h2 id="modalTitle" class="text-lg font-bold text-slate-900">새 매물 등록</h2>
+                    <p class="text-xs text-slate-500">상가·사무실 임대 핵심 스펙을 입력하세요 (* 표시는 필수 항목)</p>
+                </div>
+                <button type="button" onclick="closePropertyModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="propertyForm" onsubmit="saveProperty(event)" class="flex-1 overflow-y-auto p-6 space-y-5">
+                <input type="hidden" id="formPropertyId">
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-brand-600 flex items-center gap-1.5">
+                            <i data-lucide="camera" class="w-3.5 h-3.5"></i> 1. 현장 사진 등록 (자동 압축 · 대표사진 지정)
+                        </h3>
+                        <span id="photoCountBadge" class="text-[11px] font-medium text-slate-500">0장 첨부됨 (최대 10장)</span>
+                    </div>
+
+                    <div id="photoDropZone" onclick="document.getElementById('photoFileInput').click()" class="border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-5 text-center cursor-pointer bg-slate-50/70 hover:bg-brand-50/30 transition">
+                        <input type="file" id="photoFileInput" accept="image/*" multiple class="hidden" onchange="handlePhotoFilesSelected(event)">
+                        <div class="w-10 h-10 rounded-full bg-white border border-slate-200 text-brand-600 flex items-center justify-center mx-auto mb-2 shadow-sm">
+                            <i data-lucide="image-plus" class="w-5 h-5"></i>
+                        </div>
+                        <p class="text-xs sm:text-sm font-semibold text-slate-700">클릭하거나 현장 사진을 이곳으로 드래그하세요</p>
+                        <p class="text-[11px] text-slate-400 mt-1">JPG, PNG, WEBP 지원 · 최대 폭 1000px로 자동 최적화됩니다</p>
+                    </div>
+
+                    <div id="formPhotoGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 empty:hidden"></div>
+                </div>
+
+                <div class="space-y-3 pt-3 border-t border-slate-100">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-brand-600 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-3.5 h-3.5"></i> 2. 기본 매물 정보
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">매물번호 *</label>
+                            <input type="text" id="formPropertyCode" required placeholder="예: P-101 (미입력 시 자동생성)" class="w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">광고 현황 / 광고 채널</label>
+                            <select id="formAdStatus" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="광고대기중">광고대기중</option>
+                                <option value="네이버">네이버</option>
+                                <option value="당근">당근</option>
+                                <option value="네이버 및 당근">네이버 및 당근</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">매물명 / 건물명·호수 *</label>
+                            <input type="text" id="formTitle" required placeholder="예: 역삼역 테헤란타워 1층 코너상가 102호" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">매물 유형 *</label>
+                            <select id="formType" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="상가">상가</option>
+                                <option value="원룸">원룸</option>
+                                <option value="주택">주택</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">거래 상태 *</label>
+                            <select id="formStatus" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="계약가능">계약가능</option>
+                                <option value="협의중">협의중</option>
+                                <option value="계약완료">계약완료</option>
+                                <option value="타부동산">타부동산</option>
+                                <option value="보류">보류</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">소재지 주소 (구/동 및 도로명) *</label>
+                            <input type="text" id="formAddress" required placeholder="예: 서울시 강남구 역삼동 735-12" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">층수 구분 *</label>
+                            <select id="formFloorCategory" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="1F">1층 (로드샵)</option>
+                                <option value="UPPER">지상층 (2층 이상)</option>
+                                <option value="BASEMENT">지하층 (B1 이하)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">상세 층수 표기 *</label>
+                            <input type="text" id="formFloorText" required placeholder="예: 1층, 4층 전체, B1층" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3 pt-3 border-t border-slate-100">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-brand-600 flex items-center gap-1.5">
+                        <i data-lucide="banknote" class="w-3.5 h-3.5"></i> 3. 면적 및 금액 조건
+                    </h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div class="col-span-2 sm:col-span-1">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">전용면적 (평) *</label>
+                            <div class="relative">
+                                <input type="number" step="0.1" min="0.1" id="formAreaPyeong" required oninput="updateSqmPreview()" placeholder="예: 25.0" class="w-full px-3.5 py-2 pr-16 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <span id="sqmPreview" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">0.0㎡</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">보증금 (만원) *</label>
+                            <input type="number" min="0" id="formDeposit" required placeholder="5000" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">월세 (만원) *</label>
+                            <input type="number" min="0" id="formRent" required placeholder="350" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">관리비 (만원)</label>
+                            <input type="number" min="0" id="formMaintenance" placeholder="25" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">권리금 (만원, 없으면 0)</label>
+                            <input type="number" min="0" id="formPremium" placeholder="0" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">입주 가능일</label>
+                            <input type="text" id="formMoveIn" placeholder="즉시입주 / 협의" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3 pt-3 border-t border-slate-100">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-brand-600 flex items-center gap-1.5">
+                        <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i> 4. 실무 상세 및 연락처
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">주차 조건</label>
+                            <input type="text" id="formParking" placeholder="예: 자주식 무료 1대 / 방문주차 가능" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">방 개수</label>
+                            <input type="text" id="formRooms" placeholder="예: 방 1개, 방 3개(거실 별도)" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">화장실 개수</label>
+                            <input type="text" id="formBathrooms" placeholder="예: 화장실 1개, 화장실 2개" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">승강기(엘리베이터)</label>
+                            <select id="formElevator" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="있음">있음</option>
+                                <option value="없음">없음</option>
+                                <option value="화물용 포함">화물용 포함</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">추천 · 가능 업종</label>
+                            <input type="text" id="formRecommendedUse" placeholder="예: 카페, 베이커리, IT스타트업 사무실" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">담당 공인중개사 / 실장</label>
+                            <input type="text" id="formAgent" placeholder="예: 김민수 팀장" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">임대인 / 관리인 연락처 (내부용)</label>
+                            <input type="text" id="formOwnerContact" placeholder="예: 임대인 박OO 010-1234-5678" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">매물 특징 및 브리핑 포인트</label>
+                            <textarea id="formDescription" rows="3" placeholder="인테리어 상태, 냉난방기 유무, 렌트프리 협의 가능 여부 등" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closePropertyModal()" class="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition">취소</button>
+                    <button type="submit" id="savePropertySubmitBtn" class="px-5 py-2.5 text-sm font-semibold text-white bg-brand-600 rounded-xl hover:bg-brand-700 shadow-sm transition">저장하기</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 관리자 비밀번호 인증 모달 -->
+    <div id="adminAuthModalBackdrop" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-[1px] z-[60] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+            <div class="bg-navy-900 px-6 py-4 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-amber-400"></i>
+                    <h3 class="text-base font-bold">관리자(소장) 권한 인증</h3>
+                </div>
+                <button type="button" onclick="closeAdminAuthModal()" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form onsubmit="submitAdminAuth(event)" class="p-6 space-y-4">
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    엑셀(CSV) 내보내기, 전체 백업 복원, 직원 계정 관리 및 저장소 설정은 <strong>관리자 모드</strong>에서만 허용됩니다.
+                </p>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">관리자 비밀번호</label>
+                    <input type="password" id="adminPasswordInput" required placeholder="비밀번호 입력 (초기값: 1234)" class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                    <p class="text-[11px] text-slate-400 mt-1.5">※ 테스트 초기 비밀번호는 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-semibold">1234</code> 입니다.</p>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeAdminAuthModal()" class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50">취소</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-navy-900 rounded-xl hover:bg-slate-800">잠금 해제</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 저장소 및 지정 서버 설정 모달 -->
+    <div id="serverModalBackdrop" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-[1px] z-[60] flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-navy-900 px-6 py-4 text-white flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="server" class="w-5 h-5 text-blue-400"></i>
+                        <h3 class="text-base font-bold">저장소 및 지정 서버(API) 연동 설정</h3>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-0.5">구글 드라이브 · Supabase 실시간 공유 · 자체 서버 · 로컬 저장소 선택</p>
+                </div>
+                <button type="button" onclick="closeServerModal()" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="px-6 pt-3 border-b border-slate-200 bg-slate-50 flex items-center gap-5 text-xs font-bold">
+                <button type="button" id="serverTabConfigBtn" onclick="switchServerModalTab('config')" class="pb-2.5 border-b-2 border-brand-600 text-brand-600">
+                    연결 및 저장소 설정
+                </button>
+                <button type="button" id="serverTabSpecBtn" onclick="switchServerModalTab('spec')" class="pb-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                    SQL · 구글 앱스 스크립트 · API 가이드
+                </button>
+            </div>
+
+            <div id="serverTabConfig" class="flex-1 overflow-y-auto p-6 space-y-5">
+                <div id="serverAdminNotice" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center justify-between gap-2">
+                    <span>서버 및 저장소 설정 변경은 <strong>관리자 잠금 해제</strong> 후 가능합니다.</span>
+                    <button type="button" onclick="closeServerModal(); openAdminAuthModal();" class="px-2.5 py-1 rounded-lg bg-amber-500 text-white font-semibold shrink-0">
+                        관리자 인증
+                    </button>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-bold text-slate-700">1. 데이터 및 사진 저장 방식 선택</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/40">
+                            <input type="radio" name="storageModeRadio" value="gdrive" onchange="toggleStorageConfigSections()" class="mt-0.5 text-brand-600 server-config-input">
+                            <div>
+                                <span class="text-xs sm:text-sm font-bold text-slate-900 block">구글 드라이브 연동</span>
+                                <span class="text-[11px] text-slate-500">구글 스프레드시트와 드라이브 사진 폴더에 저장</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/40">
+                            <input type="radio" name="storageModeRadio" value="supabase" onchange="toggleStorageConfigSections()" class="mt-0.5 text-brand-600 server-config-input">
+                            <div>
+                                <span class="text-xs sm:text-sm font-bold text-slate-900 block">Supabase 실시간 공유</span>
+                                <span class="text-[11px] text-slate-500">직원들과 매물·고객·승인 상태를 실시간 공유</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/40">
+                            <input type="radio" name="storageModeRadio" value="local" onchange="toggleStorageConfigSections()" class="mt-0.5 text-brand-600 server-config-input">
+                            <div>
+                                <span class="text-xs sm:text-sm font-bold text-slate-900 block">브라우저 로컬 저장</span>
+                                <span class="text-[11px] text-slate-500">별도 서버 없이 현재 PC 브라우저에 저장</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50/40">
+                            <input type="radio" name="storageModeRadio" value="server" onchange="toggleStorageConfigSections()" class="mt-0.5 text-brand-600 server-config-input">
+                            <div>
+                                <span class="text-xs sm:text-sm font-bold text-slate-900 block">자체 REST 서버 연동</span>
+                                <span class="text-[11px] text-slate-500">직접 구축한 백엔드 API 주소로 전송</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="gdriveConfigSection" class="hidden space-y-3 pt-2 border-t border-slate-100">
+                    <label class="block text-xs font-bold text-blue-700">2. 구글 드라이브 웹 앱(Apps Script) 연결 정보</label>
+                    <input type="url" id="cfgGdriveWebAppUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <input type="password" id="cfgGdriveToken" placeholder="보안 토큰 (선택)" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="testGoogleDriveConnection()" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition">
+                            <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+                            <span>구글 드라이브 연결 및 불러오기</span>
+                        </button>
+                        <button type="button" onclick="pushLocalToGoogleDrive()" class="server-config-input inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition">
+                            <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
+                            <span>현재 데이터 → 구글 시트 일괄 저장</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="supabaseConfigSection" class="space-y-3 pt-2 border-t border-slate-100">
+                    <label class="block text-xs font-bold text-emerald-700">2. Supabase 실시간 공유 연결 정보</label>
+                    <input type="url" id="cfgSupabaseUrl" placeholder="https://xxxxxxxxxxxx.supabase.co" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <input type="password" id="cfgSupabaseAnonKey" placeholder="Supabase Anon Public Key" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <input type="text" id="cfgSupabaseBucket" placeholder="hl-crm-photos" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="testSupabaseConnection()" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition">
+                            <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+                            <span>Supabase 연결 테스트</span>
+                        </button>
+                        <button type="button" onclick="pushLocalToSupabase()" class="server-config-input inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition">
+                            <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
+                            <span>로컬 데이터 → Supabase 업로드</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="customRestConfigSection" class="hidden space-y-3 pt-2 border-t border-slate-100">
+                    <label class="block text-xs font-bold text-slate-700">2. 자체 REST 서버 접속 정보</label>
+                    <input type="url" id="cfgServerBaseUrl" placeholder="https://api.my-server.kr" class="server-config-input w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <input type="password" id="cfgServerToken" placeholder="Bearer 토큰 또는 API 비밀키 입력" class="server-config-input w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input type="text" id="cfgListingsEndpoint" placeholder="/api/listings" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <input type="text" id="cfgUploadEndpoint" placeholder="/api/upload" class="server-config-input w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 pt-1">
+                        <button type="button" onclick="testServerConnection()" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition">
+                            <i data-lucide="activity" class="w-3.5 h-3.5 text-brand-600"></i>
+                            <span>연결 테스트 (핑 체크)</span>
+                        </button>
+                        <button type="button" id="btnBulkSyncServer" onclick="bulkSyncLocalToServer()" class="server-config-input inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition">
+                            <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
+                            <span>로컬 데이터 → 서버 일괄 업로드</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="serverPingResult" class="hidden text-xs p-3 rounded-xl border"></div>
+
+                <div class="space-y-2 pt-3 border-t border-slate-100">
+                    <label class="block text-xs font-bold text-slate-700">관리자 비밀번호 변경 (선택)</label>
+                    <input type="password" id="cfgNewAdminPassword" placeholder="새 관리자 비밀번호 입력 (변경 시에만 입력)" class="server-config-input w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+            </div>
+
+            <div id="serverTabSpec" class="hidden flex-1 overflow-y-auto p-6 space-y-4 text-xs text-slate-700">
+                <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-2 leading-relaxed">
+                    <div class="font-bold text-sm flex items-center justify-between">
+                        <span>Supabase 초기 SQL 코드</span>
+                        <button type="button" onclick="copySupabaseSetupSql()" class="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-semibold">
+                            초기 SQL 코드 복사
+                        </button>
+                    </div>
+                    <button type="button" onclick="exportConfiguredHtmlForStaff()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-900 hover:bg-slate-800 text-white text-xs font-semibold">
+                        <i data-lucide="share-2" class="w-3.5 h-3.5 text-blue-300"></i>
+                        <span>현재 연결 설정이 내장된 직원 배포용 HTML 다운로드</span>
+                    </button>
+                </div>
+                <pre id="supabaseSetupSqlBlock" class="p-3 rounded-xl bg-slate-900 text-slate-100 overflow-x-auto leading-relaxed select-all">create table if not exists public.hl_properties (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.hl_staff_accounts (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
+alter table public.hl_properties enable row level security;
+alter table public.hl_staff_accounts enable row level security;
+
+drop policy if exists "hl_properties_all" on public.hl_properties;
+create policy "hl_properties_all" on public.hl_properties for all using (true) with check (true);
+
+drop policy if exists "hl_staff_all" on public.hl_staff_accounts;
+create policy "hl_staff_all" on public.hl_staff_accounts for all using (true) with check (true);
+
+alter publication supabase_realtime add table public.hl_properties;
+alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
+            </div>
+
+            <div class="px-6 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeServerModal()" class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50">닫기</button>
+                <button type="button" id="saveServerConfigBtn" onclick="saveServerConfig()" class="px-5 py-2 text-sm font-semibold text-white bg-brand-600 rounded-xl hover:bg-brand-700 shadow-sm">설정 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 직원 로그인 및 가입 신청 모달 -->
+    <div id="staffPortalBackdrop" class="hidden fixed inset-0 bg-slate-900/75 backdrop-blur-[2px] z-[62] flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div class="bg-navy-900 px-6 py-4 text-white flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-bold">HL CRM 직원 접속 · 가입 신청</h3>
+                    <p class="text-[11px] text-slate-400">관리자 가입 승인을 받은 직원 계정만 열람할 수 있습니다</p>
+                </div>
+                <button type="button" onclick="closeStaffPortalModal()" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-xs font-bold">
+                <button type="button" id="portalTabLoginBtn" onclick="switchStaffPortalTab('login')" class="py-3 border-b-2 border-brand-600 text-brand-600">
+                    직원 로그인
+                </button>
+                <button type="button" id="portalTabSignupBtn" onclick="switchStaffPortalTab('signup')" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                    신규 가입 신청
+                </button>
+            </div>
+
+            <div id="portalCurrentSessionBox" class="hidden mx-6 mt-4 p-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between text-xs">
+                <div>
+                    <span class="text-slate-500">현재 접속 직원:</span>
+                    <strong id="portalCurrentUserLabel" class="text-slate-900 ml-1">-</strong>
+                </div>
+                <button type="button" onclick="logoutStaffUser()" class="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-rose-600 font-semibold hover:bg-rose-50">
+                    로그아웃
+                </button>
+            </div>
+
+            <form id="staffLoginForm" onsubmit="submitStaffLogin(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">아이디</label>
+                    <input type="text" id="staffLoginId" required placeholder="예: park.je" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">비밀번호</label>
+                    <input type="password" id="staffLoginPwd" required placeholder="비밀번호 입력" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                </div>
+                <div class="p-3 rounded-xl bg-blue-50/80 border border-blue-100 text-[11px] text-blue-800 space-y-1">
+                    <div class="font-bold">테스트용 샘플 계정</div>
+                    <div>• 승인 완료: ID <code class="font-mono font-bold">park.je</code> / PW <code class="font-mono font-bold">1111</code></div>
+                    <div>• 승인 대기: ID <code class="font-mono font-bold">choi.mh</code> / PW <code class="font-mono font-bold">1111</code></div>
+                </div>
+                <div class="flex items-center justify-between pt-2">
+                    <button type="button" onclick="closeStaffPortalModal(); openAdminAuthModal();" class="text-xs font-semibold text-slate-500 hover:text-slate-900 underline">
+                        관리자(소장)로 인증하기
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 text-sm font-semibold text-white bg-brand-600 rounded-xl hover:bg-brand-700 shadow-sm">
+                        로그인 및 열람
+                    </button>
+                </div>
+            </form>
+
+            <form id="staffSignupForm" onsubmit="submitStaffSignup(event)" class="hidden p-6 space-y-3.5">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">이름 *</label>
+                        <input type="text" id="signupName" required placeholder="예: 정다은" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">직급/부서</label>
+                        <input type="text" id="signupRoleTitle" placeholder="예: 임대팀" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">희망 로그인 아이디 *</label>
+                    <input type="text" id="signupUsername" required placeholder="예: jung.de" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">연락처</label>
+                    <input type="text" id="signupPhone" placeholder="예: 010-9876-5432" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">비밀번호 (4자 이상) *</label>
+                    <input type="password" id="signupPassword" required minlength="4" placeholder="비밀번호 입력" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-600">
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onclick="switchStaffPortalTab('login')" class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50">취소</button>
+                    <button type="submit" class="px-5 py-2 text-sm font-semibold text-white bg-navy-900 rounded-xl hover:bg-slate-800">가입 승인 요청</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 관리자 전용: 직원 가입 승인 및 계정 해제 관리 모달 -->
+    <div id="staffAdminModalBackdrop" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-[1px] z-[63] flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-navy-900 px-6 py-4 text-white flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-bold">직원 가입 승인 및 계정 해제 관리</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">가입 승인, 계정 해제(열람 차단) 및 삭제를 관리합니다</p>
+                </div>
+                <button type="button" onclick="closeStaffModal()" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-bold text-slate-800">승인된 직원·관리자만 열람 허용 (열람 게이트)</div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">켜져 있으면 승인 대기·계정 해제·미로그인 시 화면 열람이 보호됩니다.</p>
+                    </div>
+                    <label class="inline-flex items-center gap-2 cursor-pointer shrink-0">
+                        <input type="checkbox" id="cfgRequireApprovedStaff" onchange="toggleRequireApprovedStaff(this.checked)" class="w-4 h-4 text-brand-600 rounded border-slate-300">
+                        <span id="requireApprovedLabel" class="text-xs font-bold text-slate-800">열람 게이트 활성</span>
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <span class="text-[11px] text-amber-700 font-medium block">가입 승인 대기</span>
+                        <strong id="staffSummaryPending" class="text-xl font-bold text-amber-800">0</strong>
+                    </div>
+                    <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                        <span class="text-[11px] text-emerald-700 font-medium block">승인 완료</span>
+                        <strong id="staffSummaryApproved" class="text-xl font-bold text-emerald-800">0</strong>
+                    </div>
+                    <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                        <span class="text-[11px] text-rose-700 font-medium block">계정 해제됨</span>
+                        <strong id="staffSummaryRevoked" class="text-xl font-bold text-rose-800">0</strong>
+                    </div>
+                </div>
+
+                <div class="border border-slate-200 rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+                                    <th class="py-3 px-4">직원명 · 직급</th>
+                                    <th class="py-3 px-4">아이디 · 연락처</th>
+                                    <th class="py-3 px-4">신청일</th>
+                                    <th class="py-3 px-4">계정 상태</th>
+                                    <th class="py-3 px-4 text-right">관리자 조치</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staffAccountTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                <button type="button" onclick="closeStaffModal(); openStaffPortalModal('signup');" class="text-xs font-semibold text-brand-600 hover:underline">
+                    + 새 직원 가입 신청 폼 열기
+                </button>
+                <button type="button" onclick="closeStaffModal()" class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 미승인 / 계정 해제 / 로그아웃 열람 게이트 -->
+    <div id="accessGateOverlay" class="hidden fixed inset-x-0 top-16 bottom-0 z-20 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 sm:p-7 text-center space-y-4">
+            <div id="gateIconBox" class="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <i data-lucide="shield-lock" class="w-7 h-7"></i>
+            </div>
+            <div class="space-y-1.5">
+                <h2 id="gateTitle" class="text-lg font-bold text-slate-900">관리자 가입 승인 후 열람 가능합니다</h2>
+                <p id="gateDescription" class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    승인된 직원 계정으로 로그인하거나, 관리자(소장) 권한으로 접속해 주세요.
+                </p>
+            </div>
+            <div id="gateStatusDetail" class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                현재 상태: <strong id="gateStatusText" class="text-slate-900">미로그인</strong>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2.5 pt-1">
+                <button type="button" onclick="openStaffPortalModal('login')" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white bg-brand-600 rounded-xl hover:bg-brand-700 transition">
+                    <i data-lucide="log-in" class="w-4 h-4"></i>
+                    <span>직원 로그인 · 가입신청</span>
+                </button>
+                <button type="button" onclick="openAdminAuthModal()" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                    <i data-lucide="key-round" class="w-4 h-4"></i>
+                    <span>관리자(소장) 인증</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사진 라이트박스 -->
+    <div id="lightboxBackdrop" onclick="closeLightbox()" class="hidden fixed inset-0 bg-slate-950/90 z-[70] flex flex-col items-center justify-center p-4">
+        <div class="w-full max-w-4xl flex items-center justify-between text-white mb-3" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-2">
+                <span id="lightboxCounter" class="text-xs font-mono bg-white/15 px-2.5 py-1 rounded-lg">1 / 1</span>
+                <span id="lightboxCaption" class="text-sm font-medium truncate max-w-md">매물 현장 사진</span>
+            </div>
+            <button type="button" onclick="closeLightbox()" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="relative w-full max-w-4xl flex items-center justify-center" onclick="event.stopPropagation()">
+            <button type="button" onclick="navigateLightbox(-1)" class="absolute left-2 sm:left-4 p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white border border-white/20 transition">
+                <i data-lucide="chevron-left" class="w-6 h-6"></i>
+            </button>
+            <img id="lightboxImage" src="" alt="매물 확대 사진" class="max-h-[75vh] max-w-full rounded-2xl shadow-2xl object-contain bg-slate-900">
+            <button type="button" onclick="navigateLightbox(1)" class="absolute right-2 sm:right-4 p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white border border-white/20 transition">
+                <i data-lucide="chevron-right" class="w-6 h-6"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 커스텀 확인 모달 -->
+    <div id="confirmModalBackdrop" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-[1px] z-[65] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 id="confirmModalTitle" class="text-base font-bold text-slate-900">확인</h3>
+                <button type="button" onclick="closeConfirmModal()" class="text-slate-400 hover:text-slate-700">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-5">
+                <p id="confirmModalMessage" class="text-sm text-slate-600 leading-relaxed"></p>
+                <div class="flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeConfirmModal()" class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50">취소</button>
+                    <button type="button" id="confirmModalActionBtn" class="px-4 py-2 text-sm font-semibold text-white bg-rose-600 rounded-xl hover:bg-rose-700">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 토스트 알림 컨테이너 -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-[80] flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        const STORAGE_KEY = 'promanager_commercial_properties_v2';
+        const CUSTOMERS_STORAGE_KEY = 'hl_crm_customers_v1';
+        const SERVER_CFG_KEY = 'promanager_server_config_v1';
+        const ADMIN_PWD_KEY = 'promanager_admin_pwd_v1';
+        const ADMIN_SESSION_KEY = 'promanager_is_admin_session_v1';
+        const STAFF_ACCOUNTS_KEY = 'promanager_staff_accounts_v1';
+        const STAFF_SESSION_KEY = 'promanager_current_staff_session_v1';
+        const STAFF_GATE_CFG_KEY = 'promanager_require_approved_staff_v1';
+
+        const INITIAL_SAMPLE_STAFF = [
+            { id: 'STF-01', name: '박지은', roleTitle: '임대팀 실장', username: 'park.je', passwordHash: '1111', phone: '010-4421-8890', status: 'approved', appliedAt: '2026-11-10', approvedAt: '2026-11-10' },
+            { id: 'STF-02', name: '이서준', roleTitle: '상가팀 대리', username: 'lee.sj', passwordHash: '1111', phone: '010-7731-2094', status: 'approved', appliedAt: '2026-11-12', approvedAt: '2026-11-12' },
+            { id: 'STF-03', name: '최민호', roleTitle: '신규 중개보조원', username: 'choi.mh', passwordHash: '1111', phone: '010-5190-3342', status: 'pending', appliedAt: '2026-11-23', approvedAt: null }
+        ];
+
+        function createSamplePhotoSvg(title, subtitle, bg1, bg2, accent) {
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+                <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${bg1}"/><stop offset="100%" stop-color="${bg2}"/></linearGradient></defs>
+                <rect width="800" height="520" fill="url(#g)"/>
+                <rect x="44" y="44" width="712" height="432" rx="20" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2"/>
+                <circle cx="660" cy="130" r="95" fill="${accent}" fill-opacity="0.18"/>
+                <text x="80" y="125" fill="#ffffff" font-family="sans-serif" font-size="30" font-weight="bold">${title}</text>
+                <text x="80" y="168" fill="rgba(255,255,255,0.82)" font-family="sans-serif" font-size="19">${subtitle}</text>
+                <text x="80" y="445" fill="rgba(255,255,255,0.6)" font-family="sans-serif" font-size="14">HL CRM 현장 확인 샘플 이미지</text>
+            </svg>`;
+            return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        }
+
+        const INITIAL_SAMPLE_PROPERTIES = [
+            {
+                id: 'P-102', title: '일산 주엽역 인근 풀옵션 원룸 402호', type: '원룸', status: '협의중',
+                adStatus: '네이버',
+                address: '경기도 고양시 일산서구 주엽동 98-4', floorCategory: 'UPPER', floorText: '4층',
+                areaSqm: 26.45, deposit: 1000, rent: 65, maintenance: 8, premium: 0,
+                moveIn: '2026년 12월 중순', parking: '건물 내 주차 1대 가능', elevator: '있음',
+                rooms: '방 1개 (오픈형)', bathrooms: '화장실 1개',
+                recommendedUse: '1인 직장인, 대학생, 단기 거주', agent: '박지은 실장',
+                ownerContact: '임대인 이과장 010-5540-1129', description: '에어컨·세탁기·냉장고·인덕션 풀옵션, 채광 우수.',
+                createdAt: '2026-11-19T15:10:00',
+                photos: [
+                    { id: 'ph-102-1', name: '4층_원룸_내부.svg', dataUrl: createSamplePhotoSvg('주엽역 풀옵션 원룸 내부', '전용 8평 · 방 1개 · 화장실 1개', '#1e293b', '#312e81', '#818cf8'), isPrimary: true }
+                ],
+                memos: []
+            },
+            {
+                id: 'P-103', title: '파주 운정신도시 단독주택 (마당·정원 보유)', type: '주택', status: '보류',
+                adStatus: '광고대기중',
+                address: '경기도 파주시 와동동 1420', floorCategory: '1F', floorText: '지상 2층',
+                areaSqm: 145.8, deposit: 5000, rent: 240, maintenance: 0, premium: 0,
+                moveIn: '즉시입주', parking: '마당 자주식 2대 주차', elevator: '없음',
+                rooms: '방 4개', bathrooms: '화장실 3개',
+                recommendedUse: '실거주 단독주택, 재택근무 하우스', agent: '김현우 소장',
+                ownerContact: '임대인 정OO 010-8912-3341', description: '남향 마당 보유 단독주택, 임대인 조건 재검토로 일시 보류 중.',
+                createdAt: '2026-11-18T11:20:00', photos: [], memos: []
+            }
+        ];
+
+        const INITIAL_SAMPLE_CUSTOMERS = [
+            {
+                id: 'C-101', priority: '1순위', manager: '김현우 소장', phone: '010-9123-4567',
+                firstProperty: '일산 라페스타 먹자라인 1층 코너 상가 105호', inquiryDate: '2026-11-20',
+                deposit: '5,000만', rent: '320만 이하', premium: '3,000만 이하',
+                floor: '1층', areaPyeong: '15~25평', preferredArea: '고양시 일산동구 장항동',
+                moveInDate: '즉시입주', industry: '카페·디저트',
+                requiredCond: '전면 통유리, 테라스 가능', etc: '렌트프리 협의 희망'
+            },
+            {
+                id: 'C-102', priority: '2순위', manager: '박지은 실장', phone: '010-4821-1904',
+                firstProperty: '테헤란로 역삼역 도보 3분 프라임 오피스 7층', inquiryDate: '2026-11-21',
+                deposit: '1억~1억 2천만', rent: '950만 이하', premium: '무권리',
+                floor: '지상 5층 이상', areaPyeong: '50~65평', preferredArea: '서울 강남구 역삼동',
+                moveInDate: '2026년 12월 중순', industry: '사무실 (IT)',
+                requiredCond: '회의실 2개, 주차 2대', etc: '인테리어 승계 선호'
+            }
+        ];
+
+        let properties = [];
+        let customers = [];
+        let activeMainTab = 'properties';
+        let currentViewMode = 'table';
+        let maxRentFilter = null;
+        let activeDrawerPropertyId = null;
+        let showContactUnmasked = false;
+        let isAdminMode = false;
+        let staffAccounts = [];
+        let currentStaffUser = null;
+        let requireApprovedStaffGate = true;
+        let pcFolderHandle = null;
+        let pcFolderSyncTimer = null;
+        const PC_DATA_FILE_NAME = 'hl_crm_data.json';
+
+        const EMBEDDED_SHARED_CONFIG = null;
+        let serverConfig = EMBEDDED_SHARED_CONFIG || {
+            mode: 'local', gdriveWebAppUrl: '', gdriveToken: '',
+            supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
+            baseUrl: 'https://api.my-server.kr', token: '',
+            listingsEndpoint: '/api/listings', uploadEndpoint: '/api/upload'
+        };
+
+        let supabaseClient = null;
+        let supabaseRealtimeChannel = null;
+        let tempFormPhotos = [];
+        let lightboxPhotos = [];
+        let lightboxIndex = 0;
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            loadAdminState();
+            loadStaffState();
+            loadServerConfig();
+            loadProperties();
+            loadCustomers();
+            initPhotoDropZone();
+            updateAdminUI();
+            updateStorageStatusBadge();
+            updateAccessGateUI();
+            renderAll();
+            renderCustomersList();
+            lucide.createIcons();
+
+            if (serverConfig.mode === 'supabase' && serverConfig.supabaseUrl && serverConfig.supabaseAnonKey) {
+                await initSupabaseRealtime();
+            }
+
+            document.addEventListener('click', (e) => {
+                const container = document.getElementById('dataMenuContainer');
+                const dropdown = document.getElementById('dataMenuDropdown');
+                if (container && !container.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                const lb = document.getElementById('lightboxBackdrop');
+                if (!lb.classList.contains('hidden')) {
+                    if (e.key === 'Escape') closeLightbox();
+                    if (e.key === 'ArrowLeft') navigateLightbox(-1);
+                    if (e.key === 'ArrowRight') navigateLightbox(1);
+                }
+            });
+        });
+
+        function loadAdminState() {
+            if (!localStorage.getItem(ADMIN_PWD_KEY)) localStorage.setItem(ADMIN_PWD_KEY, '1234');
+            isAdminMode = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+        }
+
+        function requireAdminGuard() {
+            if (isAdminMode) return true;
+            showToast('관리자 권한이 필요합니다. 상단에서 관리자 잠금을 해제해 주세요.', 'error');
+            openAdminAuthModal();
+            return false;
+        }
+
+        function handleAdminToggle() {
+            if (isAdminMode) {
+                isAdminMode = false;
+                sessionStorage.removeItem(ADMIN_SESSION_KEY);
+                updateAdminUI();
+                updateAccessGateUI();
+                showToast('관리자 모드가 잠겼습니다.');
+            } else {
+                openAdminAuthModal();
+            }
+        }
+
+        function openAdminAuthModal() {
+            document.getElementById('adminPasswordInput').value = '';
+            document.getElementById('adminAuthModalBackdrop').classList.remove('hidden');
+            setTimeout(() => document.getElementById('adminPasswordInput')?.focus(), 50);
+            lucide.createIcons();
+        }
+
+        function closeAdminAuthModal() {
+            document.getElementById('adminAuthModalBackdrop').classList.add('hidden');
+        }
+
+        function submitAdminAuth(e) {
+            e.preventDefault();
+            const inputPwd = document.getElementById('adminPasswordInput').value;
+            const savedPwd = localStorage.getItem(ADMIN_PWD_KEY) || '1234';
+            if (inputPwd === savedPwd) {
+                isAdminMode = true;
+                sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
+                closeAdminAuthModal();
+                updateAdminUI();
+                updateAccessGateUI();
+                showToast('관리자(소장) 권한이 인증되었습니다.');
+            } else {
+                showToast('관리자 비밀번호가 일치하지 않습니다.', 'error');
+            }
+        }
+
+        function loadStaffState() {
+            try {
+                const rawAccounts = localStorage.getItem(STAFF_ACCOUNTS_KEY);
+                staffAccounts = rawAccounts ? JSON.parse(rawAccounts) : JSON.parse(JSON.stringify(INITIAL_SAMPLE_STAFF));
+                if (!rawAccounts) saveStaffAccounts(true);
+                const rawGate = localStorage.getItem(STAFF_GATE_CFG_KEY);
+                if (rawGate !== null) requireApprovedStaffGate = rawGate === 'true';
+                const savedSessionId = sessionStorage.getItem(STAFF_SESSION_KEY);
+                if (savedSessionId) currentStaffUser = staffAccounts.find(s => s.id === savedSessionId) || null;
+            } catch (e) {
+                staffAccounts = JSON.parse(JSON.stringify(INITIAL_SAMPLE_STAFF));
+            }
+        }
+
+        function saveStaffAccounts(skipCloudSync = false) {
+            localStorage.setItem(STAFF_ACCOUNTS_KEY, JSON.stringify(staffAccounts));
+            schedulePcFolderAutoSave();
+            if (currentStaffUser) {
+                const updated = staffAccounts.find(s => s.id === currentStaffUser.id);
+                currentStaffUser = updated || null;
+                if (!currentStaffUser) sessionStorage.removeItem(STAFF_SESSION_KEY);
+            }
+            if (!skipCloudSync && serverConfig.mode === 'supabase' && supabaseClient) syncAllStaffToSupabase();
+            else if (!skipCloudSync && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) syncStaffToGoogleDrive();
+        }
+
+        function updateAdminUI() {
+            const badge = document.getElementById('roleBadge');
+            const badgeText = document.getElementById('roleBadgeText');
+            const toggleBtn = document.getElementById('adminToggleBtn');
+            const menuRoleHint = document.getElementById('menuRoleHint');
+            const pcFolderBtn = document.getElementById('pcFolderBtn');
+
+            if (isAdminMode) {
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-400 text-slate-950';
+                badgeText.textContent = '관리자 모드(소장)';
+                toggleBtn.className = 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 border border-slate-600 transition';
+                toggleBtn.innerHTML = `<i data-lucide="unlock" class="w-3.5 h-3.5 text-amber-300"></i><span>관리자 잠금</span>`;
+                if (menuRoleHint) { menuRoleHint.textContent = '관리자 해제됨'; menuRoleHint.className = 'text-emerald-600 font-bold'; }
+                if (pcFolderBtn) pcFolderBtn.classList.remove('opacity-65');
+            } else {
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-200';
+                badgeText.textContent = currentStaffUser ? `직원: ${currentStaffUser.name} (${currentStaffUser.status === 'approved' ? '승인됨' : '대기/해제'})` : '일반 직원 모드';
+                toggleBtn.className = 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition';
+                toggleBtn.innerHTML = `<i data-lucide="lock" class="w-3.5 h-3.5"></i><span>관리자 잠금 해제</span>`;
+                if (menuRoleHint) { menuRoleHint.textContent = '관리자 잠금됨'; menuRoleHint.className = 'text-amber-600'; }
+                if (pcFolderBtn) pcFolderBtn.classList.add('opacity-65');
+            }
+
+            document.querySelectorAll('.admin-lock-icon').forEach(icon => icon.classList.toggle('hidden', isAdminMode));
+            ['btnExportCSV', 'btnExportJSON', 'btnImportJSONWrapper', 'btnResetSample'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('opacity-55', !isAdminMode);
+                el.classList.toggle('bg-slate-50/70', !isAdminMode);
+            });
+            lucide.createIcons();
+        }
+
+        function canViewProperties() {
+            if (isAdminMode || !requireApprovedStaffGate) return true;
+            return Boolean(currentStaffUser && currentStaffUser.status === 'approved');
+        }
+
+        function updateAccessGateUI() {
+            const overlay = document.getElementById('accessGateOverlay');
+            const badge = document.getElementById('pendingStaffCountBadge');
+            const pendingCount = staffAccounts.filter(s => s.status === 'pending').length;
+            if (badge) {
+                badge.textContent = pendingCount;
+                badge.classList.toggle('hidden', pendingCount === 0);
+            }
+            if (!overlay) return;
+            if (canViewProperties()) {
+                overlay.classList.add('hidden');
+                return;
+            }
+            overlay.classList.remove('hidden');
+            closeDetailDrawer();
+            const titleEl = document.getElementById('gateTitle');
+            const descEl = document.getElementById('gateDescription');
+            const statusTextEl = document.getElementById('gateStatusText');
+            if (!currentStaffUser) {
+                titleEl.textContent = '승인된 직원 로그인 또는 관리자 인증이 필요합니다';
+                descEl.textContent = '관리자의 가입 승인을 받은 직원 계정으로 로그인하거나 관리자 권한으로 접속해 주세요.';
+                statusTextEl.textContent = '미로그인';
+            } else if (currentStaffUser.status === 'pending') {
+                titleEl.textContent = '관리자 가입 승인 대기 중인 계정입니다';
+                descEl.textContent = `${escapeHTML(currentStaffUser.name)}님의 가입 승인이 완료되면 열람할 수 있습니다.`;
+                statusTextEl.textContent = `승인 대기 (${escapeHTML(currentStaffUser.name)})`;
+            } else {
+                titleEl.textContent = '관리자에 의해 계정이 해제되었습니다';
+                descEl.textContent = `${escapeHTML(currentStaffUser.name)}님의 계정이 해제되어 열람이 차단되었습니다.`;
+                statusTextEl.textContent = `계정 해제됨 (${escapeHTML(currentStaffUser.name)})`;
+            }
+            lucide.createIcons();
+        }
+
+        function openStaffPortalModal(initialTab = 'login') {
+            switchStaffPortalTab(initialTab);
+            const sessionBox = document.getElementById('portalCurrentSessionBox');
+            const userLabel = document.getElementById('portalCurrentUserLabel');
+            if (currentStaffUser) {
+                sessionBox.classList.remove('hidden');
+                userLabel.textContent = `${currentStaffUser.name} (${currentStaffUser.username})`;
+            } else {
+                sessionBox.classList.add('hidden');
+            }
+            document.getElementById('staffPortalBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeStaffPortalModal() { document.getElementById('staffPortalBackdrop').classList.add('hidden'); }
+
+        function switchStaffPortalTab(tab) {
+            const loginForm = document.getElementById('staffLoginForm');
+            const signupForm = document.getElementById('staffSignupForm');
+            const loginBtn = document.getElementById('portalTabLoginBtn');
+            const signupBtn = document.getElementById('portalTabSignupBtn');
+            if (tab === 'login') {
+                loginForm.classList.remove('hidden'); signupForm.classList.add('hidden');
+                loginBtn.className = 'py-3 border-b-2 border-brand-600 text-brand-600';
+                signupBtn.className = 'py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+            } else {
+                loginForm.classList.add('hidden'); signupForm.classList.remove('hidden');
+                signupBtn.className = 'py-3 border-b-2 border-brand-600 text-brand-600';
+                loginBtn.className = 'py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+            }
+        }
+
+        function submitStaffLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('staffLoginId').value.trim();
+            const password = document.getElementById('staffLoginPwd').value;
+            const account = staffAccounts.find(s => s.username.toLowerCase() === username.toLowerCase() && s.passwordHash === password);
+            if (!account) { showToast('아이디 또는 비밀번호가 올바르지 않습니다.', 'error'); return; }
+            currentStaffUser = account;
+            sessionStorage.setItem(STAFF_SESSION_KEY, account.id);
+            closeStaffPortalModal();
+            updateAdminUI();
+            updateAccessGateUI();
+            showToast(`${account.name}님 로그인되었습니다.`);
+        }
+
+        function submitStaffSignup(e) {
+            e.preventDefault();
+            const name = document.getElementById('signupName').value.trim();
+            const roleTitle = document.getElementById('signupRoleTitle').value.trim() || '직원';
+            const username = document.getElementById('signupUsername').value.trim();
+            const phone = document.getElementById('signupPhone').value.trim();
+            const password = document.getElementById('signupPassword').value;
+            if (staffAccounts.some(s => s.username.toLowerCase() === username.toLowerCase())) {
+                showToast('이미 사용 중인 아이디입니다.', 'error'); return;
+            }
+            const newAccount = {
+                id: 'STF-' + String(Date.now()).slice(-5),
+                name, roleTitle, username, passwordHash: password, phone: phone || '-',
+                status: 'pending', appliedAt: getCurrentDateTimeStr().slice(0, 10), approvedAt: null
+            };
+            staffAccounts.unshift(newAccount);
+            saveStaffAccounts(true);
+            if (serverConfig.mode === 'supabase' && supabaseClient) upsertSingleStaffToSupabase(newAccount);
+            currentStaffUser = newAccount;
+            sessionStorage.setItem(STAFF_SESSION_KEY, newAccount.id);
+            document.getElementById('staffSignupForm').reset();
+            closeStaffPortalModal();
+            updateAdminUI();
+            updateAccessGateUI();
+            showToast(`${name}님의 가입 신청이 완료되었습니다.`);
+        }
+
+        function logoutStaffUser() {
+            currentStaffUser = null;
+            sessionStorage.removeItem(STAFF_SESSION_KEY);
+            closeStaffPortalModal();
+            updateAdminUI();
+            updateAccessGateUI();
+        }
+
+        function openStaffModal() {
+            if (!requireAdminGuard()) return;
+            renderStaffAdminModal();
+            document.getElementById('staffAdminModalBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeStaffModal() { document.getElementById('staffAdminModalBackdrop').classList.add('hidden'); }
+
+        function toggleRequireApprovedStaff(checked) {
+            if (!requireAdminGuard()) return;
+            requireApprovedStaffGate = Boolean(checked);
+            localStorage.setItem(STAFF_GATE_CFG_KEY, String(requireApprovedStaffGate));
+            updateAccessGateUI();
+        }
+
+        function renderStaffAdminModal() {
+            document.getElementById('cfgRequireApprovedStaff').checked = requireApprovedStaffGate;
+            document.getElementById('staffSummaryPending').textContent = staffAccounts.filter(s => s.status === 'pending').length;
+            document.getElementById('staffSummaryApproved').textContent = staffAccounts.filter(s => s.status === 'approved').length;
+            document.getElementById('staffSummaryRevoked').textContent = staffAccounts.filter(s => s.status === 'revoked').length;
+
+            document.getElementById('staffAccountTableBody').innerHTML = staffAccounts.map(acc => `
+                <tr>
+                    <td class="py-3 px-4"><div class="font-bold text-slate-900">${escapeHTML(acc.name)}</div><div class="text-[11px] text-slate-500">${escapeHTML(acc.roleTitle || '직원')}</div></td>
+                    <td class="py-3 px-4"><div class="font-mono font-semibold">${escapeHTML(acc.username)}</div><div class="text-[11px] text-slate-500">${escapeHTML(acc.phone || '-')}</div></td>
+                    <td class="py-3 px-4 text-slate-600">${escapeHTML(acc.appliedAt || '-')}</td>
+                    <td class="py-3 px-4"><span class="px-2.5 py-1 rounded-full font-bold ${acc.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : (acc.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')}">${acc.status === 'approved' ? '승인됨' : (acc.status === 'pending' ? '승인 대기' : '계정 해제됨')}</span></td>
+                    <td class="py-3 px-4 text-right whitespace-nowrap space-x-1">
+                        ${acc.status !== 'approved' ? `<button type="button" onclick="approveStaffAccount('${acc.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-semibold">가입 승인</button>` : ''}
+                        ${acc.status === 'approved' ? `<button type="button" onclick="revokeStaffAccount('${acc.id}')" class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-semibold">계정 해제</button>` : ''}
+                        <button type="button" onclick="confirmDeleteStaffAccount('${acc.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function approveStaffAccount(id) {
+            if (!requireAdminGuard()) return;
+            const idx = staffAccounts.findIndex(s => s.id === id);
+            if (idx === -1) return;
+            staffAccounts[idx].status = 'approved';
+            staffAccounts[idx].approvedAt = getCurrentDateTimeStr().slice(0, 10);
+            saveStaffAccounts(true);
+            if (serverConfig.mode === 'supabase' && supabaseClient) upsertSingleStaffToSupabase(staffAccounts[idx]);
+            renderStaffAdminModal(); updateAdminUI(); updateAccessGateUI();
+            showToast(`${staffAccounts[idx].name}님 가입 승인 완료`);
+        }
+
+        function revokeStaffAccount(id) {
+            if (!requireAdminGuard()) return;
+            const idx = staffAccounts.findIndex(s => s.id === id);
+            if (idx === -1) return;
+            staffAccounts[idx].status = 'revoked';
+            saveStaffAccounts(true);
+            if (serverConfig.mode === 'supabase' && supabaseClient) upsertSingleStaffToSupabase(staffAccounts[idx]);
+            renderStaffAdminModal(); updateAdminUI(); updateAccessGateUI();
+            showToast(`${staffAccounts[idx].name}님 계정 해제 완료`);
+        }
+
+        function confirmDeleteStaffAccount(id) {
+            if (!requireAdminGuard()) return;
+            const target = staffAccounts.find(s => s.id === id);
+            if (!target) return;
+            openConfirmModal('직원 계정 삭제', `'${target.name}' 계정을 삭제하시겠습니까?`, () => {
+                staffAccounts = staffAccounts.filter(s => s.id !== id);
+                saveStaffAccounts(true);
+                if (serverConfig.mode === 'supabase' && supabaseClient) deleteSingleStaffFromSupabase(id);
+                renderStaffAdminModal(); updateAdminUI(); updateAccessGateUI();
+            });
+        }
+
+        function loadServerConfig() {
+            try {
+                const rawCfg = localStorage.getItem(SERVER_CFG_KEY);
+                if (rawCfg) serverConfig = { ...serverConfig, ...JSON.parse(rawCfg) };
+                else if (EMBEDDED_SHARED_CONFIG) serverConfig = { ...serverConfig, ...EMBEDDED_SHARED_CONFIG };
+            } catch (e) {}
+        }
+
+        function loadProperties() {
+            try {
+                const rawProps = localStorage.getItem(STORAGE_KEY);
+                if (rawProps) {
+                    const parsed = JSON.parse(rawProps);
+                    if (Array.isArray(parsed)) { properties = parsed; return; }
+                }
+                properties = JSON.parse(JSON.stringify(INITIAL_SAMPLE_PROPERTIES));
+                saveToStorage();
+            } catch (e) {
+                properties = JSON.parse(JSON.stringify(INITIAL_SAMPLE_PROPERTIES));
+            }
+        }
+
+        function loadCustomers() {
+            try {
+                const rawCust = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
+                if (rawCust) {
+                    const parsed = JSON.parse(rawCust);
+                    if (Array.isArray(parsed)) { customers = parsed; return; }
+                }
+                customers = JSON.parse(JSON.stringify(INITIAL_SAMPLE_CUSTOMERS));
+                saveCustomersToStorage();
+            } catch (e) {
+                customers = JSON.parse(JSON.stringify(INITIAL_SAMPLE_CUSTOMERS));
+            }
+        }
+
+        function saveCustomersToStorage() {
+            try {
+                localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
+                schedulePcFolderAutoSave();
+            } catch (e) {
+                showToast('고객 데이터 저장 중 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        function switchMainWorkspaceTab(tab) {
+            activeMainTab = tab;
+            const propWs = document.getElementById('propertiesWorkspace');
+            const custWs = document.getElementById('customersWorkspace');
+            const propBtn = document.getElementById('mainTabPropertiesBtn');
+            const custBtn = document.getElementById('mainTabCustomersBtn');
+            if (tab === 'customers') {
+                propWs.classList.add('hidden'); custWs.classList.remove('hidden');
+                custBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition';
+                propBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition';
+                renderCustomersList();
+            } else {
+                custWs.classList.add('hidden'); propWs.classList.remove('hidden');
+                propBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition';
+                custBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition';
+                renderAll();
+            }
+            lucide.createIcons();
+        }
+
+        function renderCustomersList() {
+            document.getElementById('navPropCountBadge').textContent = properties.length;
+            document.getElementById('navCustomerCountBadge').textContent = customers.length;
+            document.getElementById('custStatTotal').textContent = customers.length;
+            document.getElementById('custStatStore').textContent = customers.filter(c => /상가|카페|음식|식당|매장|창업|판매|미용|병원|학원/i.test(`${c.industry || ''} ${c.firstProperty || ''}`)).length;
+            document.getElementById('custStatOffice').textContent = customers.filter(c => /사무실|오피스|법인|사옥|스튜디오|지산/i.test(`${c.industry || ''} ${c.firstProperty || ''}`)).length;
+            document.getElementById('custStatUrgent').textContent = customers.filter(c => /즉시|빠른|급|1개월|당월|12월/i.test(c.moveInDate || '')).length;
+
+            const q = (document.getElementById('customerSearchInput')?.value || '').trim().toLowerCase();
+            const priorityFilter = document.getElementById('customerPriorityFilter')?.value || 'ALL';
+            const list = customers.filter(c => {
+                const prio = c.priority || '2순위';
+                if (priorityFilter !== 'ALL' && prio !== priorityFilter) return false;
+                if (!q) return true;
+                return [
+                    prio, c.manager, c.phone, c.firstProperty, c.inquiryDate, c.deposit, c.rent,
+                    c.premium, c.floor, c.areaPyeong, c.preferredArea, c.moveInDate, c.industry, c.requiredCond, c.etc
+                ].join(' ').toLowerCase().includes(q);
+            });
+
+            document.getElementById('customerFilteredCount').textContent = list.length;
+            const tbody = document.getElementById('customerTableBody');
+            const emptyState = document.getElementById('customerEmptyState');
+            if (list.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                lucide.createIcons();
+                return;
+            }
+            emptyState.classList.add('hidden');
+            const getPriorityBadge = (prio) => {
+                if (prio === '1순위') return 'bg-rose-100 text-rose-800 border border-rose-200';
+                if (prio === '2순위') return 'bg-brand-100 text-brand-800 border border-brand-200';
+                if (prio === '3순위') return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+                return 'bg-slate-100 text-slate-600 border border-slate-200';
+            };
+            tbody.innerHTML = list.map(c => {
+                const prio = c.priority || '2순위';
+                return `
+                <tr class="hover:bg-emerald-50/30 transition">
+                    <td class="py-3 px-3.5 whitespace-nowrap"><span class="px-2 py-0.5 text-xs font-bold rounded-md ${getPriorityBadge(prio)}">${escapeHTML(prio)}</span></td>
+                    <td class="py-3 px-3.5 font-bold text-slate-900 whitespace-nowrap">${escapeHTML(c.manager || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-700 font-mono text-xs whitespace-nowrap">${escapeHTML(c.phone || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-800 max-w-[180px] truncate" title="${escapeHTML(c.firstProperty || '')}">${escapeHTML(c.firstProperty || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-600 whitespace-nowrap">${escapeHTML(c.inquiryDate || '-')}</td>
+                    <td class="py-3 px-3.5 font-semibold text-slate-800 whitespace-nowrap">${escapeHTML(c.deposit || '-')}</td>
+                    <td class="py-3 px-3.5 font-semibold text-brand-600 whitespace-nowrap">${escapeHTML(c.rent || '-')}</td>
+                    <td class="py-3 px-3.5 text-amber-800 whitespace-nowrap">${escapeHTML(c.premium || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-700 whitespace-nowrap">${escapeHTML(c.floor || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-700 whitespace-nowrap">${escapeHTML(c.areaPyeong || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-700 max-w-[160px] truncate" title="${escapeHTML(c.preferredArea || '')}">${escapeHTML(c.preferredArea || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-700 whitespace-nowrap">${escapeHTML(c.moveInDate || '-')}</td>
+                    <td class="py-3 px-3.5 whitespace-nowrap"><span class="px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-700">${escapeHTML(c.industry || '-')}</span></td>
+                    <td class="py-3 px-3.5 text-slate-700 max-w-[180px] truncate" title="${escapeHTML(c.requiredCond || '')}">${escapeHTML(c.requiredCond || '-')}</td>
+                    <td class="py-3 px-3.5 text-slate-500 max-w-[180px] truncate" title="${escapeHTML(c.etc || '')}">${escapeHTML(c.etc || '-')}</td>
+                    <td class="py-3 px-3.5 text-right whitespace-nowrap sticky right-0 bg-white/95">
+                        <div class="inline-flex items-center gap-1">
+                            <button type="button" onclick="openCustomerModal('${c.id}')" class="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition" title="수정"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                            <button type="button" onclick="openConfirmModal('고객 삭제', '${escapeHTML(c.manager)} 고객 정보를 삭제하시겠습니까?', () => deleteCustomer('${c.id}'))" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="삭제"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function openCustomerModal(editId = null) {
+            document.getElementById('customerForm').reset();
+            const datalist = document.getElementById('propertyDatalist');
+            if (datalist) datalist.innerHTML = properties.map(p => `<option value="${escapeHTML(p.title)}"></option>`).join('');
+
+            if (editId) {
+                const c = customers.find(item => item.id === editId);
+                if (!c) return;
+                document.getElementById('customerModalTitle').textContent = '고객 정보 수정';
+                document.getElementById('custFormId').value = c.id;
+                document.getElementById('custPriority').value = c.priority || '2순위';
+                document.getElementById('custManager').value = c.manager || '';
+                document.getElementById('custPhone').value = c.phone || '';
+                document.getElementById('custFirstProperty').value = c.firstProperty || '';
+                document.getElementById('custInquiryDate').value = c.inquiryDate || '';
+                document.getElementById('custDeposit').value = c.deposit || '';
+                document.getElementById('custRent').value = c.rent || '';
+                document.getElementById('custPremium').value = c.premium || '';
+                document.getElementById('custFloor').value = c.floor || '';
+                document.getElementById('custAreaPyeong').value = c.areaPyeong || '';
+                document.getElementById('custPreferredArea').value = c.preferredArea || '';
+                document.getElementById('custMoveInDate').value = c.moveInDate || '';
+                document.getElementById('custIndustry').value = c.industry || '';
+                document.getElementById('custRequiredCond').value = c.requiredCond || '';
+                document.getElementById('custEtc').value = c.etc || '';
+            } else {
+                document.getElementById('customerModalTitle').textContent = '새 고객 등록';
+                document.getElementById('custFormId').value = '';
+                document.getElementById('custPriority').value = '1순위';
+                document.getElementById('custInquiryDate').value = getCurrentDateTimeStr().slice(0, 10);
+            }
+            document.getElementById('customerModalBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeCustomerModal() { document.getElementById('customerModalBackdrop').classList.add('hidden'); }
+
+        function saveCustomer(e) {
+            e.preventDefault();
+            const editId = document.getElementById('custFormId').value;
+            const payload = {
+                priority: document.getElementById('custPriority').value || '2순위',
+                manager: document.getElementById('custManager').value.trim(),
+                phone: document.getElementById('custPhone').value.trim(),
+                firstProperty: document.getElementById('custFirstProperty').value.trim(),
+                inquiryDate: document.getElementById('custInquiryDate').value,
+                deposit: document.getElementById('custDeposit').value.trim(),
+                rent: document.getElementById('custRent').value.trim(),
+                premium: document.getElementById('custPremium').value.trim(),
+                floor: document.getElementById('custFloor').value.trim(),
+                areaPyeong: document.getElementById('custAreaPyeong').value.trim(),
+                preferredArea: document.getElementById('custPreferredArea').value.trim(),
+                moveInDate: document.getElementById('custMoveInDate').value.trim(),
+                industry: document.getElementById('custIndustry').value.trim(),
+                requiredCond: document.getElementById('custRequiredCond').value.trim(),
+                etc: document.getElementById('custEtc').value.trim()
+            };
+            if (editId) {
+                const idx = customers.findIndex(c => c.id === editId);
+                if (idx !== -1) { customers[idx] = { ...customers[idx], ...payload }; showToast('고객 정보가 수정되었습니다.'); }
+            } else {
+                customers.unshift({ id: 'C-' + String(Date.now()).slice(-5), ...payload });
+                showToast('새 고객이 등록되었습니다.');
+            }
+            saveCustomersToStorage();
+            closeCustomerModal();
+            renderCustomersList();
+        }
+
+        function deleteCustomer(id) {
+            customers = customers.filter(c => c.id !== id);
+            saveCustomersToStorage();
+            renderCustomersList();
+            showToast('고객 정보가 삭제되었습니다.');
+        }
+
+        function updateStorageStatusBadge() {
+            const dot = document.getElementById('storageStatusDot');
+            const label = document.getElementById('storageStatusLabel');
+            const folderLabel = document.getElementById('pcFolderLabel');
+            if (pcFolderHandle && folderLabel) folderLabel.textContent = `폴더: ${pcFolderHandle.name}`;
+            else if (folderLabel) folderLabel.textContent = 'PC 폴더 저장';
+
+            if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                dot.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+                label.textContent = '· 구글 드라이브 저장중';
+            } else if (serverConfig.mode === 'supabase' && serverConfig.supabaseUrl) {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+                label.textContent = '· 직원 실시간 공유중';
+            } else if (serverConfig.mode === 'server') {
+                dot.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+                label.textContent = '· 지정 서버 연동됨';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                label.textContent = '· 로컬 저장 모드';
+            }
+        }
+
+        async function connectOrSyncPcFolder() {
+            // 관리자 모드에서만 내 PC 폴더 연결 및 파일 저장 허용
+            if (!requireAdminGuard()) return;
+
+            if (typeof window.showDirectoryPicker !== 'function') {
+                showToast('Chrome/Edge 브라우저에서 파일을 열어 이용해 주세요.', 'error');
+                return;
+            }
+            try {
+                if (!pcFolderHandle) pcFolderHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                updateStorageStatusBadge();
+                await writePcFolderBundle(pcFolderHandle);
+                showToast(`'${pcFolderHandle.name}/${PC_DATA_FILE_NAME}'에 저장되었습니다.`);
+            } catch (err) {
+                if (err?.name !== 'AbortError') showToast('PC 폴더 접근 중 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        async function writePcFolderBundle(dirHandle = pcFolderHandle) {
+            if (!dirHandle || !isAdminMode) return;
+            try {
+                const fileHandle = await dirHandle.getFileHandle(PC_DATA_FILE_NAME, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(JSON.stringify({ app: 'HL CRM', savedAt: new Date().toISOString(), properties, customers, staffAccounts }, null, 2));
+                await writable.close();
+            } catch (err) {}
+        }
+
+        function schedulePcFolderAutoSave() {
+            if (!pcFolderHandle || !isAdminMode) return;
+            clearTimeout(pcFolderSyncTimer);
+            pcFolderSyncTimer = setTimeout(() => writePcFolderBundle(pcFolderHandle), 350);
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
+                schedulePcFolderAutoSave();
+            } catch (e) {
+                showToast('브라우저 저장 용량이 부족합니다.', 'error');
+            }
+        }
+
+        function openServerModal() {
+            document.querySelectorAll('input[name="storageModeRadio"]').forEach(r => { r.checked = (r.value === serverConfig.mode); });
+            document.getElementById('cfgGdriveWebAppUrl').value = serverConfig.gdriveWebAppUrl || '';
+            document.getElementById('cfgGdriveToken').value = serverConfig.gdriveToken || '';
+            document.getElementById('cfgSupabaseUrl').value = serverConfig.supabaseUrl || '';
+            document.getElementById('cfgSupabaseAnonKey').value = serverConfig.supabaseAnonKey || '';
+            document.getElementById('cfgSupabaseBucket').value = serverConfig.supabaseBucket || 'hl-crm-photos';
+            document.getElementById('cfgServerBaseUrl').value = serverConfig.baseUrl || '';
+            document.getElementById('cfgServerToken').value = serverConfig.token || '';
+            document.getElementById('cfgListingsEndpoint').value = serverConfig.listingsEndpoint || '/api/listings';
+            document.getElementById('cfgUploadEndpoint').value = serverConfig.uploadEndpoint || '/api/upload';
+            document.getElementById('cfgNewAdminPassword').value = '';
+            document.getElementById('serverPingResult').classList.add('hidden');
+            toggleStorageConfigSections();
+            const adminNotice = document.getElementById('serverAdminNotice');
+            const inputs = document.querySelectorAll('.server-config-input');
+            const saveBtn = document.getElementById('saveServerConfigBtn');
+            adminNotice.classList.toggle('hidden', isAdminMode);
+            inputs.forEach(el => { el.disabled = !isAdminMode; el.classList.toggle('opacity-60', !isAdminMode); });
+            saveBtn.classList.toggle('hidden', !isAdminMode);
+            switchServerModalTab('config');
+            document.getElementById('serverModalBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeServerModal() { document.getElementById('serverModalBackdrop').classList.add('hidden'); }
+
+        function switchServerModalTab(tab) {
+            const cfgTab = document.getElementById('serverTabConfig');
+            const specTab = document.getElementById('serverTabSpec');
+            const cfgBtn = document.getElementById('serverTabConfigBtn');
+            const specBtn = document.getElementById('serverTabSpecBtn');
+            if (tab === 'config') {
+                cfgTab.classList.remove('hidden'); specTab.classList.add('hidden');
+                cfgBtn.className = 'pb-2.5 border-b-2 border-brand-600 text-brand-600';
+                specBtn.className = 'pb-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+            } else {
+                cfgTab.classList.add('hidden'); specTab.classList.remove('hidden');
+                specBtn.className = 'pb-2.5 border-b-2 border-brand-600 text-brand-600';
+                cfgBtn.className = 'pb-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+            }
+        }
+
+        function toggleStorageConfigSections() {
+            const mode = document.querySelector('input[name="storageModeRadio"]:checked')?.value || 'local';
+            document.getElementById('gdriveConfigSection').classList.toggle('hidden', mode !== 'gdrive');
+            document.getElementById('supabaseConfigSection').classList.toggle('hidden', mode !== 'supabase');
+            document.getElementById('customRestConfigSection').classList.toggle('hidden', mode !== 'server');
+        }
+
+        async function saveServerConfig() {
+            if (!requireAdminGuard()) return;
+            serverConfig = {
+                mode: document.querySelector('input[name="storageModeRadio"]:checked')?.value || 'local',
+                gdriveWebAppUrl: document.getElementById('cfgGdriveWebAppUrl').value.trim(),
+                gdriveToken: document.getElementById('cfgGdriveToken').value.trim(),
+                supabaseUrl: document.getElementById('cfgSupabaseUrl').value.trim().replace(/\/+$/, ''),
+                supabaseAnonKey: document.getElementById('cfgSupabaseAnonKey').value.trim(),
+                supabaseBucket: document.getElementById('cfgSupabaseBucket').value.trim() || 'hl-crm-photos',
+                baseUrl: document.getElementById('cfgServerBaseUrl').value.trim().replace(/\/+$/, ''),
+                token: document.getElementById('cfgServerToken').value.trim(),
+                listingsEndpoint: document.getElementById('cfgListingsEndpoint').value.trim() || '/api/listings',
+                uploadEndpoint: document.getElementById('cfgUploadEndpoint').value.trim() || '/api/upload'
+            };
+            localStorage.setItem(SERVER_CFG_KEY, JSON.stringify(serverConfig));
+            const newPwd = document.getElementById('cfgNewAdminPassword').value.trim();
+            if (newPwd) {
+                if (newPwd.length < 4) {
+                    showToast('새 관리자 비밀번호는 4자 이상으로 입력해 주세요.', 'error');
+                    return;
+                }
+                localStorage.setItem(ADMIN_PWD_KEY, newPwd);
+                showToast('관리자 비밀번호와 저장소 설정이 저장되었습니다.');
+            } else {
+                showToast('저장소 설정이 저장되었습니다.');
+            }
+            if (serverConfig.mode === 'supabase') await initSupabaseRealtime();
+            updateStorageStatusBadge();
+            closeServerModal();
+        }
+
+        async function initSupabaseRealtime() {
+            try {
+                if (!serverConfig.supabaseUrl || !serverConfig.supabaseAnonKey || !window.supabase) return false;
+                supabaseClient = window.supabase.createClient(serverConfig.supabaseUrl, serverConfig.supabaseAnonKey);
+                const { data: propRows } = await supabaseClient.from('hl_properties').select('id, data').order('updated_at', { ascending: false });
+                if (Array.isArray(propRows) && propRows.length > 0) {
+                    properties = propRows.map(r => r.data).filter(Boolean);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
+                }
+                renderAll();
+                return true;
+            } catch (e) { return false; }
+        }
+
+        async function upsertSinglePropertyToSupabase(prop) {
+            if (supabaseClient && prop?.id) await supabaseClient.from('hl_properties').upsert({ id: prop.id, data: prop, updated_at: new Date().toISOString() });
+        }
+
+        async function deleteSinglePropertyFromSupabase(id) {
+            if (supabaseClient && id) await supabaseClient.from('hl_properties').delete().eq('id', id);
+        }
+
+        async function upsertSingleStaffToSupabase(staffObj) {
+            if (supabaseClient && staffObj?.id) await supabaseClient.from('hl_staff_accounts').upsert({ id: staffObj.id, data: staffObj, updated_at: new Date().toISOString() });
+        }
+
+        async function deleteSingleStaffFromSupabase(id) {
+            if (supabaseClient && id) await supabaseClient.from('hl_staff_accounts').delete().eq('id', id);
+        }
+
+        async function syncAllStaffToSupabase() {
+            if (supabaseClient && staffAccounts.length > 0) await supabaseClient.from('hl_staff_accounts').upsert(staffAccounts.map(s => ({ id: s.id, data: s, updated_at: new Date().toISOString() })));
+        }
+
+        async function testSupabaseConnection() {
+            const url = document.getElementById('cfgSupabaseUrl').value.trim().replace(/\/+$/, '');
+            const key = document.getElementById('cfgSupabaseAnonKey').value.trim();
+            const box = document.getElementById('serverPingResult');
+            box.classList.remove('hidden');
+            try {
+                const client = window.supabase.createClient(url, key);
+                const { error } = await client.from('hl_properties').select('id').limit(1);
+                if (error) throw error;
+                box.className = 'text-xs p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800';
+                box.textContent = '✓ Supabase 연결 성공!';
+            } catch (err) {
+                box.className = 'text-xs p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800';
+                box.textContent = `✕ 오류: ${err.message}`;
+            }
+        }
+
+        async function pushLocalToSupabase() {
+            if (!requireAdminGuard()) return;
+            const url = document.getElementById('cfgSupabaseUrl').value.trim().replace(/\/+$/, '') || serverConfig.supabaseUrl;
+            const key = document.getElementById('cfgSupabaseAnonKey').value.trim() || serverConfig.supabaseAnonKey;
+            const client = window.supabase.createClient(url, key);
+            if (properties.length > 0) await client.from('hl_properties').upsert(properties.map(p => ({ id: p.id, data: p, updated_at: new Date().toISOString() })));
+            if (staffAccounts.length > 0) await client.from('hl_staff_accounts').upsert(staffAccounts.map(s => ({ id: s.id, data: s, updated_at: new Date().toISOString() })));
+            showToast('Supabase로 업로드 완료');
+        }
+
+        function copySupabaseSetupSql() {
+            const sql = document.getElementById('supabaseSetupSqlBlock')?.textContent || '';
+            const textarea = document.createElement('textarea');
+            textarea.value = sql;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast('SQL 코드가 복사되었습니다.');
+        }
+
+        function exportConfiguredHtmlForStaff() {
+            if (!requireAdminGuard()) return;
+            const blob = new Blob(['<!DOCTYPE html>\n' + document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `HL_CRM_배포용_${getTodayDateStr()}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function testGoogleDriveConnection() {
+            const url = document.getElementById('cfgGdriveWebAppUrl').value.trim();
+            const box = document.getElementById('serverPingResult');
+            box.classList.remove('hidden');
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.message);
+                if (Array.isArray(data.listings) && data.listings.length > 0) { properties = data.listings; localStorage.setItem(STORAGE_KEY, JSON.stringify(properties)); }
+                renderAll();
+                box.className = 'text-xs p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800';
+                box.textContent = `✓ 구글 드라이브 연결 성공 (${(data.listings || []).length}건)`;
+            } catch (err) {
+                box.className = 'text-xs p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800';
+                box.textContent = `✕ 연결 실패: ${err.message}`;
+            }
+        }
+
+        async function pushLocalToGoogleDrive() {
+            if (!requireAdminGuard()) return;
+            const url = document.getElementById('cfgGdriveWebAppUrl').value.trim() || serverConfig.gdriveWebAppUrl;
+            await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'BULK_SYNC', listings: properties, staffAccounts }) });
+            showToast('구글 드라이브에 저장되었습니다.');
+        }
+
+        async function syncStaffToGoogleDrive() {
+            if (!serverConfig.gdriveWebAppUrl) return;
+            await fetch(serverConfig.gdriveWebAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'SYNC_STAFF', staffAccounts }) }).catch(() => {});
+        }
+
+        async function testServerConnection() {
+            const baseUrl = document.getElementById('cfgServerBaseUrl').value.trim().replace(/\/+$/, '');
+            const endpoint = document.getElementById('cfgListingsEndpoint').value.trim() || '/api/listings';
+            const box = document.getElementById('serverPingResult');
+            box.classList.remove('hidden');
+            try {
+                const res = await fetch(`${baseUrl}${endpoint}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                box.className = 'text-xs p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800';
+                box.textContent = '✓ 서버 연결 성공';
+            } catch (err) {
+                box.className = 'text-xs p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800';
+                box.textContent = `✕ 연결 실패: ${err.message}`;
+            }
+        }
+
+        async function bulkSyncLocalToServer() {
+            if (!requireAdminGuard()) return;
+            const baseUrl = document.getElementById('cfgServerBaseUrl').value.trim().replace(/\/+$/, '');
+            const endpoint = document.getElementById('cfgListingsEndpoint').value.trim() || '/api/listings';
+            await fetch(`${baseUrl}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'BULK_SYNC', listings: properties }) });
+            showToast('서버 일괄 업로드 완료');
+        }
+
+        async function syncPropertyWithServer(action, payloadObj) {
+            if (serverConfig.mode === 'supabase' && supabaseClient) {
+                if (action === 'UPSERT' && payloadObj.property) await upsertSinglePropertyToSupabase(payloadObj.property);
+                else if (action === 'DELETE' && payloadObj.propertyId) await deleteSinglePropertyFromSupabase(payloadObj.propertyId);
+            } else if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                await fetch(serverConfig.gdriveWebAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
+            } else if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
+                await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
+            }
+        }
+
+        function getPrimaryPhoto(p) { return (p?.photos || []).find(ph => ph.isPrimary) || (p?.photos || [])[0] || null; }
+
+        function compressImageFile(file, maxWidth = 1000, quality = 0.78) {
+            return new Promise((resolve, reject) => {
+                if (file.type === 'image/svg+xml') {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve({ dataUrl: reader.result });
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let w = img.width, h = img.height;
+                        if (w > maxWidth) { h = Math.round((h * maxWidth) / w); w = maxWidth; }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve({ dataUrl: canvas.toDataURL('image/jpeg', quality) });
+                    };
+                    img.onerror = reject;
+                    img.src = ev.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function initPhotoDropZone() {
+            const dropZone = document.getElementById('photoDropZone');
+            if (!dropZone) return;
+            ['dragenter', 'dragover'].forEach(evt => dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drop-zone-active'); }));
+            ['dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('drop-zone-active'); }));
+            dropZone.addEventListener('drop', e => { if (e.dataTransfer?.files?.length) processUploadedPhotoFiles(e.dataTransfer.files); });
+        }
+
+        function handlePhotoFilesSelected(e) {
+            if (e.target.files?.length) processUploadedPhotoFiles(e.target.files);
+            e.target.value = '';
+        }
+
+        async function processUploadedPhotoFiles(fileList) {
+            const files = Array.from(fileList).filter(f => f.type.startsWith('image/')).slice(0, 10 - tempFormPhotos.length);
+            for (const file of files) {
+                const { dataUrl } = await compressImageFile(file);
+                tempFormPhotos.push({ id: 'ph-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), name: file.name, dataUrl, isPrimary: tempFormPhotos.length === 0 });
+            }
+            renderFormPhotoGrid();
+        }
+
+        function renderFormPhotoGrid() {
+            const grid = document.getElementById('formPhotoGrid');
+            document.getElementById('photoCountBadge').textContent = `${tempFormPhotos.length}장 첨부됨 (최대 10장)`;
+            grid.innerHTML = tempFormPhotos.map((ph, idx) => `
+                <div class="relative rounded-xl overflow-hidden border ${ph.isPrimary ? 'border-brand-600 ring-2 ring-brand-500/30' : 'border-slate-200'} bg-slate-100 aspect-[4/3]">
+                    <img src="${escapeHTML(ph.dataUrl)}" class="w-full h-full object-cover">
+                    ${ph.isPrimary ? `<span class="absolute top-1.5 left-1.5 px-2 py-0.5 text-[10px] font-bold bg-brand-600 text-white rounded-md">대표사진</span>` : `<button type="button" onclick="setFormPrimaryPhoto(${idx})" class="absolute top-1.5 left-1.5 px-2 py-0.5 text-[10px] font-semibold bg-black/65 text-white rounded-md">대표 지정</button>`}
+                    <button type="button" onclick="removeFormPhoto(${idx})" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/65 hover:bg-rose-600 text-white flex items-center justify-center"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function setFormPrimaryPhoto(idx) {
+            tempFormPhotos = tempFormPhotos.map((ph, i) => ({ ...ph, isPrimary: i === idx }));
+            renderFormPhotoGrid();
+        }
+
+        function removeFormPhoto(idx) {
+            const wasPrimary = tempFormPhotos[idx]?.isPrimary;
+            tempFormPhotos.splice(idx, 1);
+            if (wasPrimary && tempFormPhotos.length > 0) tempFormPhotos[0].isPrimary = true;
+            renderFormPhotoGrid();
+        }
+
+        function openLightbox(propertyId, startIndex = 0) {
+            const prop = properties.find(p => p.id === propertyId);
+            if (!prop?.photos?.length) return;
+            lightboxPhotos = prop.photos;
+            lightboxIndex = Math.max(0, Math.min(startIndex, lightboxPhotos.length - 1));
+            updateLightboxView();
+            document.getElementById('lightboxBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightboxBackdrop').classList.add('hidden');
+        }
+
+        function navigateLightbox(step) {
+            if (!lightboxPhotos.length) return;
+            lightboxIndex = (lightboxIndex + step + lightboxPhotos.length) % lightboxPhotos.length;
+            updateLightboxView();
+        }
+
+        function sqmToPyeong(sqm) {
+            if (!sqm || isNaN(sqm)) return '0.0';
+            return (Number(sqm) / 3.3058).toFixed(1);
+        }
+
+        function pyeongToSqm(pyeong) {
+            if (!pyeong || isNaN(pyeong)) return 0;
+            return Number((Number(pyeong) * 3.3058).toFixed(2));
+        }
+
+        function formatMoney(manwon) {
+            const num = Number(manwon) || 0;
+            if (num === 0) return '0';
+            if (num >= 10000) {
+                const uk = Math.floor(num / 10000);
+                const rest = num % 10000;
+                return rest > 0 ? `${uk}억 ${rest.toLocaleString()}` : `${uk}억`;
+            }
+            return num.toLocaleString();
+        }
+
+        function updateLightboxView() {
+            const current = lightboxPhotos[lightboxIndex];
+            if (!current) return;
+            document.getElementById('lightboxImage').src = current.dataUrl;
+            document.getElementById('lightboxCounter').textContent = `${lightboxIndex + 1} / ${lightboxPhotos.length}`;
+            document.getElementById('lightboxCaption').textContent = current.name || '매물 현장 사진';
+        }
+
+        function getStatusBadgeStyle(s) {
+            if (s === '계약가능') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            if (s === '협의중') return 'bg-amber-50 text-amber-700 border-amber-200';
+            if (s === '타부동산') return 'bg-purple-50 text-purple-700 border-purple-200';
+            if (s === '보류') return 'bg-rose-50 text-rose-700 border-rose-200';
+            return 'bg-slate-100 text-slate-600 border-slate-300';
+        }
+        function getTypeBadgeStyle(t) {
+            if (t === '상가') return 'bg-blue-50 text-blue-700';
+            if (t === '원룸') return 'bg-teal-50 text-teal-700';
+            return 'bg-amber-50 text-amber-800';
+        }
+        function maskContact(c) { return !c ? '미등록' : (showContactUnmasked ? c : c.replace(/(\d{2,3})-(\d{3,4})-(\d{4})/, '$1-****-$3')); }
+        function escapeHTML(str) { return str == null ? '' : String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
+
+        function updateDashboardStats() {
+            document.getElementById('statTotal').textContent = properties.length;
+            document.getElementById('statAvailable').textContent = properties.filter(p => p.status === '계약가능').length;
+            document.getElementById('statNegotiating').textContent = properties.filter(p => p.status === '협의중').length;
+            document.getElementById('statCompleted').textContent = properties.filter(p => p.status === '계약완료').length;
+        }
+
+        function getFilteredProperties() {
+            const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+            const typeFilter = document.getElementById('filterType').value;
+            const statusFilter = document.getElementById('filterStatus').value;
+            const floorFilter = document.getElementById('filterFloor').value;
+            const sortBy = document.getElementById('sortBy').value;
+
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) {
+                clearBtn.classList.toggle('hidden', keyword.length === 0);
+            }
+
+            const list = properties.filter(p => {
+                if (typeFilter !== 'ALL' && p.type !== typeFilter) return false;
+                if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
+                if (floorFilter !== 'ALL' && p.floorCategory !== floorFilter) return false;
+                if (maxRentFilter !== null && Number(p.rent) > maxRentFilter) return false;
+
+                if (keyword) {
+                    const hay = [p.id, p.adStatus, p.title, p.address, p.rooms, p.bathrooms, p.recommendedUse, p.agent, p.description, p.floorText, ...(p.memos || []).map(m => m.text)].join(' ').toLowerCase();
+                    if (!hay.includes(keyword)) return false;
+                }
+                return true;
+            });
+
+            list.sort((a, b) => sortBy === 'RENT_ASC' ? Number(a.rent) - Number(b.rent) : sortBy === 'RENT_DESC' ? Number(b.rent) - Number(a.rent) : sortBy === 'AREA_DESC' ? Number(b.areaSqm) - Number(a.areaSqm) : new Date(b.createdAt) - new Date(a.createdAt));
+            return list;
+        }
+
+        function getAdBadgeStyle(adStatus) {
+            const val = String(adStatus || '').trim();
+            if (!val || val.includes('광고대기중') || val.includes('대기') || val.includes('비공개')) {
+                return 'bg-slate-100 text-slate-600 border-slate-200';
+            }
+            if (val.includes('네이버 및 당근')) {
+                return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+            }
+            if (val.includes('당근')) {
+                return 'bg-orange-50 text-orange-700 border-orange-200';
+            }
+            return 'bg-sky-50 text-sky-700 border-sky-200';
+        }
+
+        function renderAll() {
+            updateDashboardStats();
+            document.getElementById('navPropCountBadge').textContent = properties.length;
+            document.getElementById('navCustomerCountBadge').textContent = customers.length;
+            const filtered = getFilteredProperties();
+            document.getElementById('filteredCount').textContent = filtered.length;
+
+            const tableWrapper = document.getElementById('tableViewWrapper');
+            const cardWrapper = document.getElementById('cardViewWrapper');
+            const emptyState = document.getElementById('emptyState');
+
+            if (filtered.length === 0) {
+                tableWrapper.classList.add('hidden'); cardWrapper.classList.add('hidden'); emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                if (currentViewMode === 'table') {
+                    tableWrapper.classList.remove('hidden'); cardWrapper.classList.add('hidden'); renderTableView(filtered);
+                } else {
+                    tableWrapper.classList.add('hidden'); cardWrapper.classList.remove('hidden'); renderCardView(filtered);
+                }
+            }
+
+            if (activeDrawerPropertyId) {
+                const target = properties.find(p => p.id === activeDrawerPropertyId);
+                if (target) renderDetailDrawerContent(target);
+                else closeDetailDrawer();
+            }
+            lucide.createIcons();
+        }
+
+        function renderTableView(list) {
+            const tableView = document.getElementById('propertyTableBody');
+            tableView.innerHTML = list.map(p => {
+                const primaryPhoto = getPrimaryPhoto(p);
+                const photoCount = (p.photos || []).length;
+                const adText = (p.adStatus || '').trim() || '광고대기중';
+                return `
+                <tr onclick="openDetailDrawer('${p.id}')" class="hover:bg-brand-50/40 cursor-pointer transition group">
+                    <td class="py-3.5 px-4 whitespace-nowrap align-top">
+                        <span class="inline-block px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-mono text-xs font-bold border border-slate-200">${escapeHTML(p.id)}</span>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap align-top">
+                        <div class="flex items-start gap-3">
+                            <div class="relative w-16 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                                ${primaryPhoto ? `<img src="${escapeHTML(primaryPhoto.dataUrl)}" class="w-full h-full object-cover">${photoCount > 1 ? `<span class="absolute bottom-0.5 right-0.5 px-1.5 text-[10px] font-bold bg-slate-900/80 text-white rounded">+${photoCount - 1}</span>` : ''}` : `<i data-lucide="image" class="w-4 h-4 text-slate-300"></i>`}
+                            </div>
+                            <div class="flex flex-col gap-1.5 items-start">
+                                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md ${getTypeBadgeStyle(p.type)}">${escapeHTML(p.type)}</span>
+                                <select onclick="event.stopPropagation()" onchange="quickChangeStatus('${p.id}', this.value)" class="text-xs font-semibold px-2 py-1 rounded-lg border cursor-pointer ${getStatusBadgeStyle(p.status)}">
+                                    <option value="계약가능" ${p.status === '계약가능' ? 'selected' : ''}>계약가능</option>
+                                    <option value="협의중" ${p.status === '협의중' ? 'selected' : ''}>협의중</option>
+                                    <option value="계약완료" ${p.status === '계약완료' ? 'selected' : ''}>계약완료</option>
+                                    <option value="타부동산" ${p.status === '타부동산' ? 'selected' : ''}>타부동산</option>
+                                    <option value="보류" ${p.status === '보류' ? 'selected' : ''}>보류</option>
+                                </select>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-3.5 px-4 align-top max-w-xs">
+                        <div class="font-bold text-slate-900 group-hover:text-brand-600 transition line-clamp-1">${escapeHTML(p.title)}</div>
+                        <div class="text-xs text-slate-500 mt-0.5 truncate">${escapeHTML(p.address)}</div>
+                        <div class="text-[11px] text-slate-400 mt-1">담당: ${escapeHTML(p.agent || '미지정')} · 입주: ${escapeHTML(p.moveIn || '협의')}</div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap align-top">
+                        <div class="font-semibold text-slate-800">${escapeHTML(p.floorText)}</div>
+                        <div class="text-xs text-slate-500 mt-0.5">${p.areaSqm}㎡ <span class="text-brand-600 font-medium">(${sqmToPyeong(p.areaSqm)}평)</span></div>
+                        <div class="text-[11px] text-slate-600 mt-0.5">${escapeHTML(p.rooms || '-')} · ${escapeHTML(p.bathrooms || '-')}</div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap align-top">
+                        <div class="font-bold text-slate-900 text-sm">${formatMoney(p.deposit)} / <span class="text-brand-600">${formatMoney(p.rent)}</span>만</div>
+                        <div class="text-xs text-slate-500 mt-0.5">관리비 ${Number(p.maintenance) > 0 ? formatMoney(p.maintenance) + '만' : '없음'}</div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap align-top hidden md:table-cell">
+                        <div class="text-xs font-medium text-slate-700">권리금: ${Number(p.premium) > 0 ? `<span class="text-amber-700 font-semibold">${formatMoney(p.premium)}만</span>` : '무권리'}</div>
+                        <div class="text-xs text-slate-500 mt-1 truncate max-w-[160px]">주차: ${escapeHTML(p.parking || '확인필요')}</div>
+                    </td>
+                    <td class="py-3.5 px-4 align-top hidden lg:table-cell max-w-[220px]">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${getAdBadgeStyle(adText)}" title="${escapeHTML(adText)}">
+                            <i data-lucide="megaphone" class="w-3 h-3 shrink-0"></i>
+                            <span class="truncate max-w-[165px]">${escapeHTML(adText)}</span>
+                        </span>
+                        <div class="text-xs text-slate-700 truncate mt-1.5" title="${escapeHTML(p.recommendedUse || '')}">${escapeHTML(p.recommendedUse || '-')}</div>
+                        <div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px]">상담메모 ${(p.memos || []).length}건</div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-right align-top" onclick="event.stopPropagation()">
+                        <button type="button" onclick="openDetailDrawer('${p.id}')" class="p-1.5 text-slate-500 hover:text-brand-600 rounded-lg"><i data-lucide="panel-right-open" class="w-4 h-4"></i></button>
+                        <button type="button" onclick="openPropertyModal('${p.id}')" class="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                    </td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        function renderCardView(list) {
+            document.getElementById('cardViewWrapper').innerHTML = list.map(p => {
+                const primaryPhoto = getPrimaryPhoto(p);
+                const adText = (p.adStatus || '').trim() || '광고대기중';
+                return `
+                <div onclick="openDetailDrawer('${p.id}')" class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:border-brand-300 cursor-pointer transition flex flex-col justify-between">
+                    <div>
+                        <div class="relative h-40 bg-slate-100 border-b border-slate-100 overflow-hidden">
+                            ${primaryPhoto ? `<img src="${escapeHTML(primaryPhoto.dataUrl)}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-slate-300"><i data-lucide="image" class="w-6 h-6"></i></div>`}
+                            <div class="absolute top-3 left-3 flex items-center gap-1.5">
+                                <span class="px-2 py-0.5 text-[11px] font-mono font-bold rounded-md bg-slate-900/85 text-white">${escapeHTML(p.id)}</span>
+                                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-md ${getTypeBadgeStyle(p.type)}">${escapeHTML(p.type)}</span>
+                            </div>
+                        </div>
+                        <div class="p-5">
+                            <div class="mb-2">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${getAdBadgeStyle(adText)}">
+                                    <i data-lucide="megaphone" class="w-3 h-3"></i>
+                                    <span>광고: ${escapeHTML(adText)}</span>
+                                </span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-base truncate">${escapeHTML(p.title)}</h3>
+                            <p class="text-xs text-slate-500 mt-1 truncate">${escapeHTML(p.address)}</p>
+                            <div class="mt-3 p-3 rounded-xl bg-slate-50 flex items-center justify-between">
+                                <span class="font-bold text-slate-900">${formatMoney(p.deposit)} / <span class="text-brand-600">${formatMoney(p.rent)}</span>만</span>
+                                <span class="text-xs font-semibold text-slate-700">${escapeHTML(p.floorText)} · ${sqmToPyeong(p.areaSqm)}평</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mx-5 mb-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                        <span>담당: ${escapeHTML(p.agent || '미지정')}</span>
+                        <span>메모 ${(p.memos || []).length}건</span>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        function applyFilters() { renderAll(); }
+        function clearSearch() { document.getElementById('searchInput').value = ''; applyFilters(); }
+        function quickFilterStatus(status) { document.getElementById('filterStatus').value = status; applyFilters(); }
+        function setMaxRentFilter(maxVal) {
+            maxRentFilter = maxVal;
+            document.querySelectorAll('.rent-chip').forEach(btn => {
+                const active = (maxVal === null && btn.dataset.rentBtn === 'ALL') || String(maxVal) === btn.dataset.rentBtn;
+                btn.className = `rent-chip px-2.5 py-1 rounded-lg transition ${active ? 'bg-brand-600 text-white font-medium' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
+            });
+            applyFilters();
+        }
+        function resetAllFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterType').value = 'ALL';
+            document.getElementById('filterStatus').value = 'ALL';
+            document.getElementById('filterFloor').value = 'ALL';
+            document.getElementById('sortBy').value = 'NEWEST';
+            setMaxRentFilter(null);
+        }
+        function setViewMode(mode) { currentViewMode = mode; renderAll(); }
+
+        function quickChangeStatus(id, newStatus) {
+            const idx = properties.findIndex(p => p.id === id);
+            if (idx === -1 || properties[idx].status === newStatus) return;
+            const oldStatus = properties[idx].status;
+            properties[idx].status = newStatus;
+            properties[idx].memos = properties[idx].memos || [];
+            properties[idx].memos.unshift({ id: 'm-' + Date.now(), date: getCurrentDateTimeStr(), author: '시스템', text: `상태 변경: [${oldStatus}] → [${newStatus}]` });
+            saveToStorage();
+            syncPropertyWithServer('UPSERT', { property: properties[idx] });
+            renderAll();
+            showToast(`상태가 '${newStatus}'(으)로 변경되었습니다.`);
+        }
+
+        function openDetailDrawer(id) {
+            const prop = properties.find(p => p.id === id);
+            if (!prop) return;
+            activeDrawerPropertyId = id;
+            showContactUnmasked = false;
+            renderDetailDrawerContent(prop);
+            document.getElementById('detailDrawerBackdrop').classList.remove('hidden');
+            document.getElementById('detailDrawer').classList.remove('translate-x-full');
+            lucide.createIcons();
+        }
+
+        function closeDetailDrawer() {
+            activeDrawerPropertyId = null;
+            document.getElementById('detailDrawerBackdrop').classList.add('hidden');
+            document.getElementById('detailDrawer').classList.add('translate-x-full');
+        }
+
+        function toggleContactMask() {
+            showContactUnmasked = !showContactUnmasked;
+            if (activeDrawerPropertyId) {
+                const prop = properties.find(p => p.id === activeDrawerPropertyId);
+                if (prop) { renderDetailDrawerContent(prop); lucide.createIcons(); }
+            }
+        }
+
+        function renderDetailDrawerContent(p) {
+            document.getElementById('drawerTypeBadge').textContent = p.type;
+            document.getElementById('drawerTypeBadge').className = `px-2.5 py-1 text-xs font-semibold rounded-lg ${getTypeBadgeStyle(p.type)}`;
+            document.getElementById('drawerIdText').textContent = `#${p.id}`;
+            document.getElementById('drawerEditBtn').onclick = () => openPropertyModal(p.id);
+            document.getElementById('drawerDeleteBtn').onclick = () => openConfirmModal('매물 삭제', `'${p.title}' 매물을 삭제하시겠습니까?`, () => deleteProperty(p.id));
+
+            const statusStyle = getStatusBadgeStyle(p.status);
+            const memos = p.memos || [];
+            const photos = p.photos || [];
+            const primaryIdx = Math.max(0, photos.findIndex(ph => ph.isPrimary));
+            const mainPhoto = photos[primaryIdx] || null;
+
+            document.getElementById('drawerContent').innerHTML = `
+                <div class="space-y-2">
+                    ${mainPhoto ? `<div onclick="openLightbox('${p.id}', ${primaryIdx})" class="relative h-56 rounded-2xl overflow-hidden bg-slate-900 border cursor-zoom-in"><img src="${escapeHTML(mainPhoto.dataUrl)}" class="w-full h-full object-cover"></div>` : ''}
+                </div>
+                <div>
+                    <div class="flex items-start justify-between gap-3">
+                        <h2 class="text-xl font-bold text-slate-900">${escapeHTML(p.title)}</h2>
+                        <select onchange="quickChangeStatus('${p.id}', this.value)" class="text-xs font-bold px-3 py-1.5 rounded-xl border cursor-pointer shrink-0 ${statusStyle}">
+                            <option value="계약가능" ${p.status === '계약가능' ? 'selected' : ''}>계약가능</option>
+                            <option value="협의중" ${p.status === '협의중' ? 'selected' : ''}>협의중</option>
+                            <option value="계약완료" ${p.status === '계약완료' ? 'selected' : ''}>계약완료</option>
+                            <option value="타부동산" ${p.status === '타부동산' ? 'selected' : ''}>타부동산</option>
+                            <option value="보류" ${p.status === '보류' ? 'selected' : ''}>보류</option>
+                        </select>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-1">${escapeHTML(p.address)}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl border">
+                    <div><span class="text-xs text-slate-500 block">보증금 / 월세</span><strong class="text-base text-brand-600">${formatMoney(p.deposit)} / ${formatMoney(p.rent)}만</strong></div>
+                    <div><span class="text-xs text-slate-500 block">층수 · 전용면적</span><strong class="text-sm text-slate-800">${escapeHTML(p.floorText)} · ${sqmToPyeong(p.areaSqm)}평 (${p.areaSqm}㎡)</strong></div>
+                </div>
+                <div class="bg-white border rounded-2xl divide-y text-sm">
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">매물번호</span><span class="font-mono font-bold text-slate-800">${escapeHTML(p.id)}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">광고 상태</span><span class="font-semibold text-sky-700">${escapeHTML((p.adStatus || '').trim() || '광고대기중')}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">권리금</span><span>${Number(p.premium) > 0 ? formatMoney(p.premium) + '만' : '무권리'}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">방 · 화장실</span><span>${escapeHTML(p.rooms || '-')} · ${escapeHTML(p.bathrooms || '-')}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">추천업종</span><span>${escapeHTML(p.recommendedUse || '-')}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">주차 · 승강기</span><span>${escapeHTML(p.parking || '-')} · ${escapeHTML(p.elevator || '-')}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between items-center"><span class="text-slate-500">임대인 연락처</span><span>${escapeHTML(maskContact(p.ownerContact))} <button type="button" onclick="toggleContactMask()" class="text-xs underline ml-1">${showContactUnmasked ? '가리기' : '보기'}</button></span></div>
+                </div>
+                <p class="text-sm text-slate-700 bg-slate-50 p-4 rounded-2xl whitespace-pre-line">${escapeHTML(p.description || '')}</p>
+                <div class="space-y-3 pt-2 border-t">
+                    <h3 class="text-xs font-bold text-brand-600">상담 메모 (${memos.length})</h3>
+                    <form onsubmit="addMemoToProperty(event, '${p.id}')" class="space-y-2">
+                        <textarea id="newMemoInput" rows="2" required placeholder="상담 메모 입력..." class="w-full px-3 py-2 text-sm border rounded-xl"></textarea>
+                        <div class="flex justify-between gap-2">
+                            <input type="text" id="newMemoAuthor" value="${escapeHTML(p.agent || '담당자')}" class="w-32 px-2.5 py-1.5 text-xs border rounded-lg">
+                            <button type="submit" class="px-3.5 py-1.5 text-xs font-semibold text-white bg-brand-600 rounded-lg">메모 등록</button>
+                        </div>
+                    </form>
+                    <div class="space-y-2">
+                        ${memos.map(m => `<div class="p-3 rounded-xl border bg-white text-sm"><div class="flex justify-between text-xs text-slate-400 mb-1"><span><strong class="text-slate-700">${escapeHTML(m.author)}</strong> · ${escapeHTML(m.date)}</span><button type="button" onclick="deleteMemoFromProperty('${p.id}', '${m.id}')" class="hover:text-rose-600">삭제</button></div><p class="whitespace-pre-line">${escapeHTML(m.text)}</p></div>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function addMemoToProperty(e, propertyId) {
+            e.preventDefault();
+            const prop = properties.find(p => p.id === propertyId);
+            if (!prop) return;
+            prop.memos = prop.memos || [];
+            prop.memos.unshift({ id: 'm-' + Date.now(), date: getCurrentDateTimeStr(), author: document.getElementById('newMemoAuthor').value.trim() || '담당자', text: document.getElementById('newMemoInput').value.trim() });
+            saveToStorage();
+            syncPropertyWithServer('UPSERT', { property: prop });
+            renderAll();
+        }
+
+        function deleteMemoFromProperty(propertyId, memoId) {
+            const prop = properties.find(p => p.id === propertyId);
+            if (!prop) return;
+            prop.memos = (prop.memos || []).filter(m => m.id !== memoId);
+            saveToStorage();
+            syncPropertyWithServer('UPSERT', { property: prop });
+            renderAll();
+        }
+
+        function openPropertyModal(editId = null) {
+            document.getElementById('propertyForm').reset();
+            if (editId) {
+                const p = properties.find(item => item.id === editId);
+                if (!p) return;
+                document.getElementById('modalTitle').textContent = '매물 정보 수정';
+                document.getElementById('formPropertyId').value = p.id;
+                document.getElementById('formPropertyCode').value = p.id || '';
+                document.getElementById('formAdStatus').value = p.adStatus || '광고대기중';
+                document.getElementById('formTitle').value = p.title || '';
+                document.getElementById('formType').value = p.type || '상가';
+                document.getElementById('formStatus').value = p.status || '계약가능';
+                document.getElementById('formAddress').value = p.address || '';
+                document.getElementById('formFloorCategory').value = p.floorCategory || '1F';
+                document.getElementById('formFloorText').value = p.floorText || '';
+                document.getElementById('formAreaPyeong').value = p.areaSqm ? sqmToPyeong(p.areaSqm) : '';
+                document.getElementById('formDeposit').value = p.deposit ?? 0;
+                document.getElementById('formRent').value = p.rent ?? 0;
+                document.getElementById('formMaintenance').value = p.maintenance ?? 0;
+                document.getElementById('formPremium').value = p.premium ?? 0;
+                document.getElementById('formMoveIn').value = p.moveIn || '';
+                document.getElementById('formParking').value = p.parking || '';
+                document.getElementById('formRooms').value = p.rooms || '';
+                document.getElementById('formBathrooms').value = p.bathrooms || '';
+                document.getElementById('formElevator').value = p.elevator || '있음';
+                document.getElementById('formRecommendedUse').value = p.recommendedUse || '';
+                document.getElementById('formAgent').value = p.agent || '';
+                document.getElementById('formOwnerContact').value = p.ownerContact || '';
+                document.getElementById('formDescription').value = p.description || '';
+                tempFormPhotos = JSON.parse(JSON.stringify(p.photos || []));
+            } else {
+                document.getElementById('modalTitle').textContent = '새 매물 등록';
+                document.getElementById('formPropertyId').value = '';
+                document.getElementById('formPropertyCode').value = `P-${101 + properties.length + Math.floor(Math.random() * 90)}`;
+                document.getElementById('formAdStatus').value = '광고대기중';
+                document.getElementById('formMoveIn').value = '즉시입주';
+                tempFormPhotos = [];
+            }
+            renderFormPhotoGrid();
+            updateSqmPreview();
+            document.getElementById('propertyModalBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closePropertyModal() { document.getElementById('propertyModalBackdrop').classList.add('hidden'); }
+        function updateSqmPreview() {
+            const pyeongVal = parseFloat(document.getElementById('formAreaPyeong').value);
+            document.getElementById('sqmPreview').textContent = `${pyeongToSqm(pyeongVal).toFixed(1)}㎡`;
+        }
+
+        function saveProperty(e) {
+            e.preventDefault();
+            const editId = document.getElementById('formPropertyId').value;
+            const customCode = (document.getElementById('formPropertyCode').value || '').trim();
+            const finalId = customCode || editId || `P-${101 + properties.length + Math.floor(Math.random() * 90)}`;
+
+            const duplicateExists = properties.some(p => p.id === finalId && p.id !== editId);
+            if (duplicateExists) {
+                showToast(`이미 사용 중인 매물번호(${finalId})입니다. 다른 번호를 입력해 주세요.`, 'error');
+                return;
+            }
+
+            const inputPyeong = parseFloat(document.getElementById('formAreaPyeong').value) || 0;
+            const convertedSqm = pyeongToSqm(inputPyeong);
+
+            const payload = {
+                id: finalId,
+                adStatus: (document.getElementById('formAdStatus').value || '').trim() || '광고대기중',
+                title: document.getElementById('formTitle').value.trim(),
+                type: document.getElementById('formType').value,
+                status: document.getElementById('formStatus').value,
+                address: document.getElementById('formAddress').value.trim(),
+                floorCategory: document.getElementById('formFloorCategory').value,
+                floorText: document.getElementById('formFloorText').value.trim(),
+                areaSqm: convertedSqm,
+                deposit: parseInt(document.getElementById('formDeposit').value, 10) || 0,
+                rent: parseInt(document.getElementById('formRent').value, 10) || 0,
+                maintenance: parseInt(document.getElementById('formMaintenance').value, 10) || 0,
+                premium: parseInt(document.getElementById('formPremium').value, 10) || 0,
+                moveIn: document.getElementById('formMoveIn').value.trim() || '협의',
+                parking: document.getElementById('formParking').value.trim(),
+                rooms: document.getElementById('formRooms').value.trim(),
+                bathrooms: document.getElementById('formBathrooms').value.trim(),
+                elevator: document.getElementById('formElevator').value,
+                recommendedUse: document.getElementById('formRecommendedUse').value.trim(),
+                agent: document.getElementById('formAgent').value.trim(),
+                ownerContact: document.getElementById('formOwnerContact').value.trim(),
+                description: document.getElementById('formDescription').value.trim(),
+                photos: JSON.parse(JSON.stringify(tempFormPhotos))
+            };
+            let targetProp = null;
+            if (editId) {
+                const idx = properties.findIndex(p => p.id === editId);
+                if (idx !== -1) {
+                    properties[idx] = { ...properties[idx], ...payload };
+                    targetProp = properties[idx];
+                    if (activeDrawerPropertyId === editId) activeDrawerPropertyId = finalId;
+                    showToast('매물이 수정되었습니다.');
+                }
+            } else {
+                targetProp = { ...payload, createdAt: new Date().toISOString(), memos: [] };
+                properties.unshift(targetProp);
+                showToast('새 매물이 등록되었습니다.');
+            }
+            saveToStorage();
+            if (targetProp) syncPropertyWithServer('UPSERT', { property: targetProp });
+            closePropertyModal();
+            renderAll();
+        }
+
+        function deleteProperty(id) {
+            properties = properties.filter(p => p.id !== id);
+            saveToStorage();
+            syncPropertyWithServer('DELETE', { propertyId: id });
+            if (activeDrawerPropertyId === id) closeDetailDrawer();
+            renderAll();
+            showToast('매물이 삭제되었습니다.');
+        }
+
+        function toggleDataMenu() { document.getElementById('dataMenuDropdown').classList.toggle('hidden'); }
+
+        function exportCSV() {
+            document.getElementById('dataMenuDropdown').classList.add('hidden');
+            if (!requireAdminGuard()) return;
+            const headers = ['매물번호', '광고상태', '유형', '거래상태', '매물명', '주소', '층수', '방', '화장실', '전용면적(㎡)', '전용면적(평)', '보증금(만원)', '월세(만원)', '관리비(만원)', '권리금(만원)', '담당자', '임대인연락처'];
+            const rows = properties.map(p => [p.id, p.adStatus || '', p.type, p.status, p.title, p.address, p.floorText, p.rooms || '', p.bathrooms || '', p.areaSqm, sqmToPyeong(p.areaSqm), p.deposit, p.rent, p.maintenance, p.premium, p.agent, p.ownerContact].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
+            const blob = new Blob(['\uFEFF' + [headers.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `HL_CRM_매물목록_${getTodayDateStr()}.csv`; a.click(); URL.revokeObjectURL(url);
+        }
+
+        function exportJSON() {
+            document.getElementById('dataMenuDropdown').classList.add('hidden');
+            if (!requireAdminGuard()) return;
+            const blob = new Blob([JSON.stringify({ properties, customers }, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `HL_CRM_백업_${getTodayDateStr()}.json`; a.click(); URL.revokeObjectURL(url);
+        }
+
+        function handleImportJSONClick() {
+            document.getElementById('dataMenuDropdown').classList.add('hidden');
+            if (!requireAdminGuard()) return;
+            document.getElementById('jsonImportInput').click();
+        }
+
+        function importJSON(e) {
+            if (!requireAdminGuard()) return;
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const parsed = JSON.parse(ev.target.result);
+                    if (Array.isArray(parsed)) { properties = parsed; saveToStorage(); }
+                    else if (parsed && Array.isArray(parsed.properties)) {
+                        properties = parsed.properties; saveToStorage();
+                        if (Array.isArray(parsed.customers)) { customers = parsed.customers; saveCustomersToStorage(); }
+                    }
+                    renderAll(); renderCustomersList();
+                    showToast('백업 데이터를 복원했습니다.');
+                } catch (err) { showToast('백업 파일 형식이 올바르지 않습니다.', 'error'); }
+                finally { e.target.value = ''; }
+            };
+            reader.readAsText(file);
+        }
+
+        function handleResetSampleClick() {
+            document.getElementById('dataMenuDropdown').classList.add('hidden');
+            if (!requireAdminGuard()) return;
+            openConfirmModal('샘플 데이터 초기화', '현재 매물 및 고객 목록을 초기 샘플로 되돌리시겠습니까?', resetSampleData);
+        }
+
+        function resetSampleData() {
+            properties = JSON.parse(JSON.stringify(INITIAL_SAMPLE_PROPERTIES));
+            customers = JSON.parse(JSON.stringify(INITIAL_SAMPLE_CUSTOMERS));
+            saveToStorage(); saveCustomersToStorage();
+            closeDetailDrawer(); resetAllFilters(); renderCustomersList();
+            showToast('초기 샘플 데이터로 복원되었습니다.');
+        }
+
+        let pendingConfirmCallback = null;
+        function openConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalMessage').textContent = message;
+            pendingConfirmCallback = onConfirm;
+            document.getElementById('confirmModalActionBtn').onclick = () => { if (pendingConfirmCallback) pendingConfirmCallback(); closeConfirmModal(); };
+            document.getElementById('confirmModalBackdrop').classList.remove('hidden');
+        }
+        function closeConfirmModal() { document.getElementById('confirmModalBackdrop').classList.add('hidden'); pendingConfirmCallback = null; }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `${type === 'error' ? 'bg-rose-600' : 'bg-slate-900'} text-white text-xs sm:text-sm font-medium px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-2`;
+            toast.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-circle' : 'check-circle'}" class="w-4 h-4 shrink-0"></i><span>${escapeHTML(message)}</span>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+            requestAnimationFrame(() => toast.classList.remove('opacity-0', 'translate-y-2'));
+            setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => toast.remove(), 300); }, 2800);
+        }
+
+        function getCurrentDateTimeStr() {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function getTodayDateStr() {
+            const now = new Date();
+            return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        }
+    </script>
+</body>
+</html>
