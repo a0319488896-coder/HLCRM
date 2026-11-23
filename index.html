@@ -2940,5 +2940,30 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
         }
     </script>
+    <script>
+(async function () {
+  const cfg = JSON.parse(localStorage.getItem('promanager_server_config_v1') || '{}');
+  const url = (cfg.scriptUrl || cfg.url || cfg.endpoint || '').trim();
+  if (!url || !url.includes('/exec')) return;
+
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    const data = await res.json();
+    if (!data || data.ok === false) return;
+
+    if (Array.isArray(data.listings)) {
+      localStorage.setItem('promanager_commercial_properties_v2', JSON.stringify(data.listings));
+    }
+    if (Array.isArray(data.staffAccounts)) {
+      localStorage.setItem('promanager_staff_accounts_v1', JSON.stringify(data.staffAccounts));
+    }
+    if (data.adminPassword) {
+      localStorage.setItem('promanager_admin_pwd_v1', JSON.stringify(data.adminPassword));
+    }
+  } catch (e) {
+    console.warn('자동 동기화 실패:', e);
+  }
+})();
+</script>
 </body>
 </html>
