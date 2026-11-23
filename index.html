@@ -1420,6 +1420,9 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         let sharedAdminPassword = null;
         let cloudSyncReady = false;
         let cloudSyncBusy = false;
+        // 동기화 중 새 저장 요청이 들어와도 누락되지 않도록 직렬 처리합니다.
+        let cloudSyncPending = false;
+        let cloudSyncPromise = null;
         let serverConfig = EMBEDDED_SHARED_CONFIG || {
             mode: 'gdrive', gdriveWebAppUrl: 'https://script.google.com/macros/s/AKfycbwClLn2BvrdlhO7DTgo9FxAO6R7fVapIQQZzhW6qAZdfB06CrvtV8DV4GEBHEJ_rS4zog/exec', gdriveToken: '',
             supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
@@ -1827,7 +1830,8 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
                 schedulePcFolderAutoSave();
                 if (cloudSyncReady && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
-                    syncAllDataToGoogleSheets('customers');
+                    // 반환 Promise는 내부에서 오류를 표시하며, 저장 요청은 큐에 보존됩니다.
+                    void syncAllDataToGoogleSheets('customers');
                 }
             } catch (e) {
                 showToast('고객 데이터 저장 중 오류가 발생했습니다.', 'error');
@@ -2485,30 +2489,64 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
         async function syncAllDataToGoogleSheets(changedType = 'all') {
             const url = getActiveGdriveUrl();
-            if (!url || !cloudSyncReady) return;
-            if (cloudSyncBusy) return;
+            if (!url || !cloudSyncReady || serverConfig.mode !== 'gdrive') return false;
+
+            // 이미 전송 중이면 요청을 버리지 않고, 최신 데이터로 한 번 더 전송하도록 표시합니다.
+            cloudSyncPending = true;
+            if (cloudSyncPromise) return cloudSyncPromise;
+
             cloudSyncBusy = true;
-            try {
-                const currentAdminPwd = sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '';
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({
+            cloudSyncPromise = (async () => {
+                let lastSuccess = false;
+                let latestChangedType = changedType;
+
+                while (cloudSyncPending) {
+                    cloudSyncPending = false;
+
+                    // 요청 직전에 최신 상태를 스냅샷으로 만듭니다.
+                    const payload = {
                         action: 'BULK_SYNC',
-                        listings: properties,
-                        customers,
-                        staffAccounts,
-                        adminPassword: currentAdminPwd,
-                        changedType
-                    })
-                });
-                const data = await res.json().catch(() => ({ ok: true }));
-                if (data && data.ok === false) throw new Error(data.message || '구글 시트 저장 실패');
+                        listings: JSON.parse(JSON.stringify(properties || [])),
+                        customers: JSON.parse(JSON.stringify(customers || [])),
+                        staffAccounts: JSON.parse(JSON.stringify(staffAccounts || [])),
+                        adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '',
+                        changedType: latestChangedType
+                    };
+
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                    const data = await res.json();
+                    if (!data || data.ok !== true) {
+                        throw new Error(data?.error || data?.message || 'Google Sheets 저장 실패');
+                    }
+
+                    lastSuccess = true;
+                    // 전송 중 새 저장이 발생하면 cloudSyncPending이 true가 되어 반복 전송됩니다.
+                }
+
+                return lastSuccess;
+            })();
+
+            try {
+                return await cloudSyncPromise;
             } catch (err) {
                 console.error('Google Sheets sync failed:', err);
                 showToast(`공유 데이터 저장 실패: ${err.message}`, 'error');
+                return false;
             } finally {
                 cloudSyncBusy = false;
+                cloudSyncPromise = null;
+
+                // 마지막 요청이 끝나는 시점에 새 변경이 들어온 경우도 놓치지 않습니다.
+                if (cloudSyncPending) {
+                    syncAllDataToGoogleSheets('queued');
+                }
             }
         }
 
