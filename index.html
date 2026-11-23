@@ -255,6 +255,11 @@
                     <span>고객 관리 리스트</span>
                     <span id="navCustomerCountBadge" class="px-1.5 py-0.5 text-[11px] rounded-full bg-slate-700 text-slate-200">0</span>
                 </button>
+                <button type="button" id="mainTabContractsBtn" onclick="switchMainWorkspaceTab('contracts')" class="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition">
+                    <i data-lucide="file-signature" class="w-4 h-4 text-amber-400"></i>
+                    <span>계약 관리</span>
+                    <span id="navContractCountBadge" class="px-1.5 py-0.5 text-[11px] rounded-full bg-slate-700 text-slate-200">0</span>
+                </button>
             </div>
         </div>
     </header>
@@ -359,6 +364,11 @@
                             <option value="UPPER">지상층 (2층 이상)</option>
                             <option value="BASEMENT">지하층 (B1 이하)</option>
                         </select>
+
+                        <input type="number" id="filterDepositMin" oninput="applyFilters()" min="0" placeholder="보증금 최소(만원)" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-0">
+                        <input type="number" id="filterDepositMax" oninput="applyFilters()" min="0" placeholder="보증금 최대(만원)" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-0">
+                        <input type="number" id="filterRentMin" oninput="applyFilters()" min="0" placeholder="월세 최소(만원)" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-0">
+                        <input type="number" id="filterRentMax" oninput="applyFilters()" min="0" placeholder="월세 최대(만원)" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-0">
 
                         <select id="sortBy" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
                             <option value="NEWEST">정렬: 최신등록순</option>
@@ -548,7 +558,74 @@
                 </div>
             </section>
         </div>
+
+        <!-- ========================================================= -->
+        <!-- [워크스페이스 3] 계약 관리 영역 -->
+        <!-- ========================================================= -->
+        <div id="contractsWorkspace" class="hidden space-y-6">
+            <section class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <span class="text-xs sm:text-sm font-medium text-slate-500">전체 계약</span>
+                    <div class="mt-2 flex items-baseline gap-1.5"><span id="contractStatTotal" class="text-2xl sm:text-3xl font-bold text-slate-900">0</span><span class="text-xs text-slate-500">건</span></div>
+                    <p class="mt-1 text-xs text-slate-400">등록된 계약 이력</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <span class="text-xs sm:text-sm font-medium text-slate-500">중개수수료 합계</span>
+                    <div class="mt-2 flex items-baseline gap-1.5"><span id="contractStatFee" class="text-2xl sm:text-3xl font-bold text-amber-600">0</span><span class="text-xs text-slate-500">만원</span></div>
+                    <p class="mt-1 text-xs text-slate-400">등록된 계약 기준</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+                    <span class="text-xs sm:text-sm font-medium text-slate-500">최근 계약</span>
+                    <div id="contractStatLatest" class="mt-2 text-lg font-bold text-slate-900">-</div>
+                    <p class="mt-1 text-xs text-slate-400">가장 최근 계약일</p>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" id="contractSearchInput" oninput="renderContractsList()" placeholder="임대인, 임차인, 물건지, 계약일 검색..." class="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+                </div>
+                <button type="button" onclick="openContractModal()" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-500 shadow-sm transition shrink-0">
+                    <i data-lucide="file-plus-2" class="w-4 h-4"></i><span>계약 등록</span>
+                </button>
+            </section>
+
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead><tr class="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-500 whitespace-nowrap">
+                            <th class="py-3.5 px-3.5">계약일</th><th class="py-3.5 px-3.5">중도금</th><th class="py-3.5 px-3.5">잔금일</th><th class="py-3.5 px-3.5">임대인</th><th class="py-3.5 px-3.5">임차인</th><th class="py-3.5 px-3.5">계약금</th><th class="py-3.5 px-3.5">잔금</th><th class="py-3.5 px-3.5">물건지</th><th class="py-3.5 px-3.5">금액</th><th class="py-3.5 px-3.5">중개수수료</th><th class="py-3.5 px-3.5 text-right">관리</th>
+                        </tr></thead>
+                        <tbody id="contractTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <div id="contractEmptyState" class="hidden p-12 text-center"><div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3"><i data-lucide="file-x" class="w-6 h-6"></i></div><h3 class="text-base font-semibold text-slate-800">등록된 계약이 없습니다</h3><p class="text-sm text-slate-500 mt-1">계약 등록 버튼으로 첫 계약을 등록해 주세요.</p></div>
+            </section>
+        </div>
     </main>
+
+    <!-- 계약 등록 / 수정 모달 -->
+    <div id="contractModalBackdrop" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-[1px] z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50"><div><h2 id="contractModalTitle" class="text-lg font-bold text-slate-900">새 계약 등록</h2><p class="text-xs text-slate-500">계약 주요 일정과 금액을 입력하세요</p></div><button type="button" onclick="closeContractModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <form id="contractForm" onsubmit="saveContract(event)" class="flex-1 overflow-y-auto p-6 space-y-4"><input type="hidden" id="contractFormId">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">계약일 *</label><input type="date" id="contractDate" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">중도금</label><input type="text" id="contractInterim" placeholder="날짜 또는 금액" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">잔금일</label><input type="date" id="contractFinalDate" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">임대인 *</label><input type="text" id="contractLessor" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">임차인 *</label><input type="text" id="contractLessee" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">계약금 (만원)</label><input type="number" id="contractDeposit" min="0" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">잔금 (만원)</label><input type="number" id="contractBalance" min="0" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">금액 (만원)</label><input type="number" id="contractAmount" min="0" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div><label class="block text-xs font-semibold text-slate-700 mb-1">중개수수료 (만원)</label><input type="number" id="contractFee" min="0" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                    <div class="sm:col-span-3"><label class="block text-xs font-semibold text-slate-700 mb-1">물건지 *</label><input type="text" id="contractProperty" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"></div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100"><button type="button" onclick="closeContractModal()" class="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-xl">취소</button><button type="submit" class="px-4 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-500">저장</button></div>
+            </form>
+        </div>
+    </div>
 
     <!-- 고객 등록 / 수정 모달 -->
     <div id="customerModalBackdrop" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-[1px] z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -1301,6 +1378,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
     <script>
         const STORAGE_KEY = 'promanager_commercial_properties_v2';
         const CUSTOMERS_STORAGE_KEY = 'hl_crm_customers_v1';
+        const CONTRACTS_STORAGE_KEY = 'hl_crm_contracts_v1';
         const SERVER_CFG_KEY = 'promanager_server_config_v1';
         const ADMIN_PWD_KEY = 'promanager_admin_pwd_v1';
         const ADMIN_SESSION_KEY = 'promanager_is_admin_session_v1';
@@ -1403,6 +1481,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
         let properties = [];
         let customers = [];
+        let contracts = [];
         let activeMainTab = 'properties';
         let currentViewMode = 'table';
         let maxRentFilter = null;
@@ -1424,7 +1503,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         let cloudSyncPending = false;
         let cloudSyncPromise = null;
         let serverConfig = EMBEDDED_SHARED_CONFIG || {
-            mode: 'gdrive', gdriveWebAppUrl: 'https://script.google.com/macros/s/AKfycbwClLn2BvrdlhO7DTgo9FxAO6R7fVapIQQZzhW6qAZdfB06CrvtV8DV4GEBHEJ_rS4zog/exec', gdriveToken: '',
+            mode: 'gdrive', gdriveWebAppUrl: 'https://script.google.com/macros/s/AKfycbysAFI8JgXozefYXi9UXCW7-7O5sQ9mj7x1JMqmV3Mty7IVLUhLjm0XBc1yrul-Qt-x/exec', gdriveToken: '',
             supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
             baseUrl: '', token: '',
             listingsEndpoint: '/api/listings', uploadEndpoint: '/api/upload'
@@ -1442,6 +1521,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             loadServerConfig();
             loadProperties();
             loadCustomers();
+            loadContracts();
             initPhotoDropZone();
             updateAdminUI();
             updateStorageStatusBadge();
@@ -1825,6 +1905,61 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             }
         }
 
+        function loadContracts() {
+            try { const raw = localStorage.getItem(CONTRACTS_STORAGE_KEY); contracts = raw ? JSON.parse(raw) : []; if (!Array.isArray(contracts)) contracts = []; } catch (e) { contracts = []; }
+        }
+
+        function saveContractsToStorage() {
+            try {
+                localStorage.setItem(CONTRACTS_STORAGE_KEY, JSON.stringify(contracts));
+                schedulePcFolderAutoSave();
+                if (cloudSyncReady && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) void syncAllDataToGoogleSheets('contracts');
+            } catch (e) { showToast('계약 데이터 저장 중 오류가 발생했습니다.', 'error'); }
+        }
+
+        function openContractModal(editId = null) {
+            const c = editId ? contracts.find(x => x.id === editId) : null;
+            document.getElementById('contractFormId').value = c?.id || '';
+            document.getElementById('contractModalTitle').textContent = c ? '계약 수정' : '새 계약 등록';
+            document.getElementById('contractDate').value = c?.contractDate || getTodayDateStr();
+            document.getElementById('contractInterim').value = c?.interim || '';
+            document.getElementById('contractFinalDate').value = c?.finalDate || '';
+            document.getElementById('contractLessor').value = c?.lessor || '';
+            document.getElementById('contractLessee').value = c?.lessee || '';
+            document.getElementById('contractDeposit').value = c?.deposit ?? '';
+            document.getElementById('contractBalance').value = c?.balance ?? '';
+            document.getElementById('contractAmount').value = c?.amount ?? '';
+            document.getElementById('contractFee').value = c?.fee ?? '';
+            document.getElementById('contractProperty').value = c?.propertyAddress || '';
+            document.getElementById('contractModalBackdrop').classList.remove('hidden');
+            lucide.createIcons();
+        }
+        function closeContractModal() { document.getElementById('contractModalBackdrop').classList.add('hidden'); }
+        function saveContract(e) {
+            e.preventDefault();
+            const id = document.getElementById('contractFormId').value;
+            const payload = { id: id || 'CT-' + String(Date.now()).slice(-6), contractDate: document.getElementById('contractDate').value, interim: document.getElementById('contractInterim').value.trim(), finalDate: document.getElementById('contractFinalDate').value, lessor: document.getElementById('contractLessor').value.trim(), lessee: document.getElementById('contractLessee').value.trim(), deposit: Number(document.getElementById('contractDeposit').value || 0), balance: Number(document.getElementById('contractBalance').value || 0), amount: Number(document.getElementById('contractAmount').value || 0), fee: Number(document.getElementById('contractFee').value || 0), propertyAddress: document.getElementById('contractProperty').value.trim() };
+            const idx = contracts.findIndex(c => c.id === payload.id);
+            if (idx >= 0) contracts[idx] = payload; else contracts.unshift(payload);
+            saveContractsToStorage(); closeContractModal(); renderContractsList(); showToast(idx >= 0 ? '계약 정보가 수정되었습니다.' : '새 계약이 등록되었습니다.');
+        }
+        function deleteContract(id) {
+            if (!confirm('이 계약을 삭제하시겠습니까?')) return;
+            contracts = contracts.filter(c => c.id !== id); saveContractsToStorage(); renderContractsList(); showToast('계약이 삭제되었습니다.');
+        }
+        function renderContractsList() {
+            const q = (document.getElementById('contractSearchInput')?.value || '').trim().toLowerCase();
+            const list = contracts.filter(c => !q || [c.contractDate,c.interim,c.finalDate,c.lessor,c.lessee,c.propertyAddress,c.amount,c.fee].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.contractDate||'').localeCompare(String(a.contractDate||'')));
+            document.getElementById('navContractCountBadge').textContent = contracts.length;
+            document.getElementById('contractStatTotal').textContent = contracts.length;
+            document.getElementById('contractStatFee').textContent = contracts.reduce((s,c)=>s+Number(c.fee||0),0).toLocaleString();
+            document.getElementById('contractStatLatest').textContent = contracts.length ? (contracts.slice().sort((a,b)=>String(b.contractDate||'').localeCompare(String(a.contractDate||'')))[0].contractDate || '-') : '-';
+            const body = document.getElementById('contractTableBody'); const empty = document.getElementById('contractEmptyState');
+            empty.classList.toggle('hidden', list.length > 0);
+            body.innerHTML = list.map(c => `<tr><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(c.contractDate||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.interim||'-')}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(c.finalDate||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.lessor||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.lessee||'-')}</td><td class="py-3 px-3.5">${formatMoney(c.deposit)}만</td><td class="py-3 px-3.5">${formatMoney(c.balance)}만</td><td class="py-3 px-3.5 min-w-[220px]">${escapeHTML(c.propertyAddress||'-')}</td><td class="py-3 px-3.5 font-semibold">${formatMoney(c.amount)}만</td><td class="py-3 px-3.5 font-semibold text-amber-700">${formatMoney(c.fee)}만</td><td class="py-3 px-3.5 text-right whitespace-nowrap"><button onclick="openContractModal('${c.id}')" class="p-1.5 text-slate-500 hover:text-brand-600"><i data-lucide="pencil" class="w-4 h-4"></i></button><button onclick="deleteContract('${c.id}')" class="p-1.5 text-slate-500 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('');
+            lucide.createIcons();
+        }
+
         function saveCustomersToStorage() {
             try {
                 localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
@@ -1842,19 +1977,15 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             activeMainTab = tab;
             const propWs = document.getElementById('propertiesWorkspace');
             const custWs = document.getElementById('customersWorkspace');
+            const contractWs = document.getElementById('contractsWorkspace');
             const propBtn = document.getElementById('mainTabPropertiesBtn');
             const custBtn = document.getElementById('mainTabCustomersBtn');
-            if (tab === 'customers') {
-                propWs.classList.add('hidden'); custWs.classList.remove('hidden');
-                custBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition';
-                propBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition';
-                renderCustomersList();
-            } else {
-                custWs.classList.add('hidden'); propWs.classList.remove('hidden');
-                propBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition';
-                custBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition';
-                renderAll();
-            }
+            const contractBtn = document.getElementById('mainTabContractsBtn');
+            [propWs, custWs, contractWs].forEach(el => el.classList.add('hidden'));
+            [propBtn, custBtn, contractBtn].forEach(btn => btn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-t-xl text-slate-300 hover:text-white hover:bg-slate-800/70 transition');
+            if (tab === 'customers') { custWs.classList.remove('hidden'); custBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition'; renderCustomersList(); }
+            else if (tab === 'contracts') { contractWs.classList.remove('hidden'); contractBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition'; renderContractsList(); }
+            else { propWs.classList.remove('hidden'); propBtn.className = 'inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl bg-slate-50 text-slate-900 transition'; renderAll(); }
             lucide.createIcons();
         }
 
@@ -2046,7 +2177,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             try {
                 const fileHandle = await dirHandle.getFileHandle(PC_DATA_FILE_NAME, { create: true });
                 const writable = await fileHandle.createWritable();
-                await writable.write(JSON.stringify({ app: 'HL CRM', savedAt: new Date().toISOString(), properties, customers, staffAccounts }, null, 2));
+                await writable.write(JSON.stringify({ app: 'HL CRM', savedAt: new Date().toISOString(), properties, customers, contracts, staffAccounts }, null, 2));
                 await writable.close();
             } catch (err) {}
         }
@@ -2427,6 +2558,11 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
                 syncedAny = true;
             }
+            if (Array.isArray(data.contracts)) {
+                contracts = data.contracts;
+                localStorage.setItem(CONTRACTS_STORAGE_KEY, JSON.stringify(contracts));
+                syncedAny = true;
+            }
             if (Array.isArray(data.staffAccounts)) {
                 staffAccounts = data.staffAccounts;
                 saveStaffAccounts(true);
@@ -2508,6 +2644,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                         action: 'BULK_SYNC',
                         listings: JSON.parse(JSON.stringify(properties || [])),
                         customers: JSON.parse(JSON.stringify(customers || [])),
+                        contracts: JSON.parse(JSON.stringify(contracts || [])),
                         staffAccounts: JSON.parse(JSON.stringify(staffAccounts || [])),
                         adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '',
                         changedType: latestChangedType
@@ -2805,6 +2942,12 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             const typeFilter = document.getElementById('filterType').value;
             const statusFilter = document.getElementById('filterStatus').value;
             const floorFilter = document.getElementById('filterFloor').value;
+            const depositMin = Number(document.getElementById('filterDepositMin')?.value || 0);
+            const depositMaxRaw = document.getElementById('filterDepositMax')?.value;
+            const rentMin = Number(document.getElementById('filterRentMin')?.value || 0);
+            const rentMaxRaw = document.getElementById('filterRentMax')?.value;
+            const depositMax = depositMaxRaw === '' ? Infinity : Number(depositMaxRaw);
+            const rentMax = rentMaxRaw === '' ? Infinity : Number(rentMaxRaw);
             const sortBy = document.getElementById('sortBy').value;
 
             const clearBtn = document.getElementById('clearSearchBtn');
@@ -2816,7 +2959,11 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 if (typeFilter !== 'ALL' && p.type !== typeFilter) return false;
                 if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
                 if (floorFilter !== 'ALL' && p.floorCategory !== floorFilter) return false;
-                if (maxRentFilter !== null && Number(p.rent) > maxRentFilter) return false;
+                const deposit = Number(p.deposit || 0);
+                const rent = Number(p.rent || 0);
+                if (maxRentFilter !== null && rent > maxRentFilter) return false;
+                if (deposit < depositMin || deposit > depositMax) return false;
+                if (rent < rentMin || rent > rentMax) return false;
 
                 if (keyword) {
                     const hay = [p.id, p.adStatus, p.title, p.address, p.rooms, p.bathrooms, p.recommendedUse, p.agent, p.description, p.floorText, ...(p.memos || []).map(m => m.text)].join(' ').toLowerCase();
@@ -2847,6 +2994,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             updateDashboardStats();
             document.getElementById('navPropCountBadge').textContent = properties.length;
             document.getElementById('navCustomerCountBadge').textContent = customers.length;
+            document.getElementById('navContractCountBadge').textContent = contracts.length;
             const filtered = getFilteredProperties();
             document.getElementById('filteredCount').textContent = filtered.length;
 
@@ -2990,6 +3138,10 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.getElementById('filterType').value = 'ALL';
             document.getElementById('filterStatus').value = 'ALL';
             document.getElementById('filterFloor').value = 'ALL';
+            document.getElementById('filterDepositMin').value = '';
+            document.getElementById('filterDepositMax').value = '';
+            document.getElementById('filterRentMin').value = '';
+            document.getElementById('filterRentMax').value = '';
             document.getElementById('sortBy').value = 'NEWEST';
             setMaxRentFilter(null);
         }
@@ -3269,7 +3421,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         function exportJSON() {
             document.getElementById('dataMenuDropdown').classList.add('hidden');
             if (!requireAdminGuard()) return;
-            const blob = new Blob([JSON.stringify({ properties, customers }, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify({ properties, customers, contracts }, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = `HL_CRM_백업_${getTodayDateStr()}.json`; a.click(); URL.revokeObjectURL(url);
         }
@@ -3292,6 +3444,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                     else if (parsed && Array.isArray(parsed.properties)) {
                         properties = parsed.properties; saveToStorage();
                         if (Array.isArray(parsed.customers)) { customers = parsed.customers; saveCustomersToStorage(); }
+                        if (Array.isArray(parsed.contracts)) { contracts = parsed.contracts; saveContractsToStorage(); }
                     }
                     renderAll(); renderCustomersList();
                     showToast('백업 데이터를 복원했습니다.');
