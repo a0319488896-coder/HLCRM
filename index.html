@@ -2173,7 +2173,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             }
         }
 
-  function getActiveGdriveUrl() {
+        function getActiveGdriveUrl() {
             const inputEl = document.getElementById('cfgGdriveWebAppUrl');
             const fromInput = inputEl ? inputEl.value.trim() : '';
             return fromInput || (serverConfig && serverConfig.gdriveWebAppUrl ? serverConfig.gdriveWebAppUrl.trim() : '');
