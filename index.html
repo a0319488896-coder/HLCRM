@@ -2173,16 +2173,45 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             }
         }
 
+        function getActiveGdriveUrl() {
+            const inputEl = document.getElementById('cfgGdriveWebAppUrl');
+            const fromInput = inputEl ? inputEl.value.trim() : '';
+            return fromInput || (serverConfig && serverConfig.gdriveWebAppUrl ? serverConfig.gdriveWebAppUrl.trim() : '');
+        }
+
         async function pushLocalToGoogleDrive() {
             if (!requireAdminGuard()) return;
-            const url = document.getElementById('cfgGdriveWebAppUrl').value.trim() || serverConfig.gdriveWebAppUrl;
-            await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'BULK_SYNC', listings: properties, staffAccounts }) });
-            showToast('구글 드라이브에 저장되었습니다.');
+            const url = getActiveGdriveUrl();
+            if (!url) {
+                showToast('구글 드라이브 웹 앱(/exec) 주소를 먼저 입력하세요.');
+                return;
+            }
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'BULK_SYNC', listings: properties, staffAccounts })
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.message || '시트 저장 실패');
+                showToast('구글 드라이브에 저장되었습니다.');
+            } catch (err) {
+                showToast(`시트 저장 오류: ${err.message}`);
+            }
         }
 
         async function syncStaffToGoogleDrive() {
-            if (!serverConfig.gdriveWebAppUrl) return;
-            await fetch(serverConfig.gdriveWebAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'SYNC_STAFF', staffAccounts }) }).catch(() => {});
+            const url = getActiveGdriveUrl();
+            if (!url) return;
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'SYNC_STAFF', staffAccounts })
+                });
+            } catch (err) {
+                console.error('직원 동기화 오류:', err);
+            }
         }
 
         async function testServerConnection() {
@@ -2213,11 +2242,31 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             if (serverConfig.mode === 'supabase' && supabaseClient) {
                 if (action === 'UPSERT' && payloadObj.property) await upsertSinglePropertyToSupabase(payloadObj.property);
                 else if (action === 'DELETE' && payloadObj.propertyId) await deleteSinglePropertyFromSupabase(payloadObj.propertyId);
-            } else if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
-                await fetch(serverConfig.gdriveWebAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
-            } else if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
-                await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
+                return;
             }
+            if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
+                await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, ...payloadObj })
+                }).catch(() => {});
+                return;
+            }
+            const gdriveUrl = getActiveGdriveUrl();
+            if (gdriveUrl) {
+                try {
+                    const res = await fetch(gdriveUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action, ...payloadObj })
+                    });
+                    const data = await res.json();
+                    if (!data.ok) throw new Error(data.message || '시트 반영 실패');
+                } catch (err) {
+                    showToast(`시트 반영 오류: ${err.message}`);
+                }
+            }
+        }
         }
 
         function getPrimaryPhoto(p) { return (p?.photos || []).find(ph => ph.isPrimary) || (p?.photos || [])[0] || null; }
