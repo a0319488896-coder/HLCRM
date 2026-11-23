@@ -60,7 +60,10 @@
             border-color: #1e40af !important;
             background-color: #eff6ff !important;
         }
-    </style>
+    
+        /* HL CRM 공유형 운영: Google Sheets/Drive만 사용합니다. Supabase 설정 UI는 비활성화합니다. */
+        .supabase-config-section { display:none !important; }
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
 
@@ -1027,8 +1030,22 @@ create table if not exists public.hl_staff_accounts (
   updated_at timestamptz default now()
 );
 
+create table if not exists public.hl_customers (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.hl_app_settings (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
 alter table public.hl_properties enable row level security;
 alter table public.hl_staff_accounts enable row level security;
+alter table public.hl_customers enable row level security;
+alter table public.hl_app_settings enable row level security;
 
 drop policy if exists "hl_properties_all" on public.hl_properties;
 create policy "hl_properties_all" on public.hl_properties for all using (true) with check (true);
@@ -1036,8 +1053,16 @@ create policy "hl_properties_all" on public.hl_properties for all using (true) w
 drop policy if exists "hl_staff_all" on public.hl_staff_accounts;
 create policy "hl_staff_all" on public.hl_staff_accounts for all using (true) with check (true);
 
+drop policy if exists "hl_customers_all" on public.hl_customers;
+create policy "hl_customers_all" on public.hl_customers for all using (true) with check (true);
+
+drop policy if exists "hl_app_settings_all" on public.hl_app_settings;
+create policy "hl_app_settings_all" on public.hl_app_settings for all using (true) with check (true);
+
 alter publication supabase_realtime add table public.hl_properties;
-alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
+alter publication supabase_realtime add table public.hl_staff_accounts;
+alter publication supabase_realtime add table public.hl_customers;
+alter publication supabase_realtime add table public.hl_app_settings;</pre>
             </div>
 
             <div class="px-6 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
@@ -1304,6 +1329,21 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
 
         const INITIAL_SAMPLE_PROPERTIES = [
             {
+                id: 'P-101', title: '일산 라페스타 먹자라인 1층 코너 상가 105호', type: '상가', status: '계약가능',
+                adStatus: '네이버 및 당근',
+                address: '경기도 고양시 일산동구 장항동 756', floorCategory: '1F', floorText: '1층',
+                areaSqm: 72.73, deposit: 5000, rent: 320, maintenance: 25, premium: 2500,
+                moveIn: '즉시입주', parking: '건물 공용 주차 가능', elevator: '있음',
+                rooms: '홀 (코너 전면 유리)', bathrooms: '내부 화장실 1개',
+                recommendedUse: '카페, 디저트, 외식, 프랜차이즈 매장', agent: '김현우 소장',
+                ownerContact: '임대인 한OO 010-6321-7780', description: '유동인구 풍부한 코너 상가, 전면 노출 우수.',
+                createdAt: '2026-11-21T10:00:00',
+                photos: [
+                    { id: 'ph-101-1', name: '1층_코너상가_전면.svg', dataUrl: createSamplePhotoSvg('라페스타 1층 코너 상가', '전용 22평 · 코너 로드샵 · 즉시입주', '#0f172a', '#1e40af', '#60a5fa'), isPrimary: true }
+                ],
+                memos: []
+            },
+            {
                 id: 'P-102', title: '일산 주엽역 인근 풀옵션 원룸 402호', type: '원룸', status: '협의중',
                 adStatus: '네이버',
                 address: '경기도 고양시 일산서구 주엽동 98-4', floorCategory: 'UPPER', floorText: '4층',
@@ -1328,6 +1368,17 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
                 recommendedUse: '실거주 단독주택, 재택근무 하우스', agent: '김현우 소장',
                 ownerContact: '임대인 정OO 010-8912-3341', description: '남향 마당 보유 단독주택, 임대인 조건 재검토로 일시 보류 중.',
                 createdAt: '2026-11-18T11:20:00', photos: [], memos: []
+            },
+            {
+                id: 'P-104', title: '파주 운정역 도보권 지상 3층 근린상가', type: '상가', status: '계약가능',
+                adStatus: '당근',
+                address: '경기도 파주시 목동동 940-2', floorCategory: 'UPPER', floorText: '3층',
+                areaSqm: 99.17, deposit: 3000, rent: 190, maintenance: 18, premium: 0,
+                moveIn: '즉시입주', parking: '지상·기계식 주차 2대', elevator: '있음',
+                rooms: '홀 + 룸 2개', bathrooms: '내부 화장실 1개',
+                recommendedUse: '학원, 스튜디오, 사무실, 필라테스', agent: '이서준 대리',
+                ownerContact: '임대인 최OO 010-3902-6614', description: '무권리 상태, 채광 좋고 깔끔한 내부 컨디션.',
+                createdAt: '2026-11-17T09:30:00', photos: [], memos: []
             }
         ];
 
@@ -1365,11 +1416,14 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
         let pcFolderSyncTimer = null;
         const PC_DATA_FILE_NAME = 'hl_crm_data.json';
 
-        const EMBEDDED_SHARED_CONFIG = { mode: 'gdrive', gdriveWebAppUrl: '여기에_주소_넣기', gdriveToken: '', supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos', baseUrl: 'https://api.my-server.kr', token: '', listingsEndpoint: '/api/listings', uploadEndpoint: '/api/upload' };
+        const EMBEDDED_SHARED_CONFIG = null;
+        let sharedAdminPassword = null;
+        let cloudSyncReady = false;
+        let cloudSyncBusy = false;
         let serverConfig = EMBEDDED_SHARED_CONFIG || {
-            mode: 'local', gdriveWebAppUrl: '', gdriveToken: '',
+            mode: 'gdrive', gdriveWebAppUrl: 'https://script.google.com/macros/s/AKfycbwClLn2BvrdlhO7DTgo9FxAO6R7fVapIQQZzhW6qAZdfB06CrvtV8DV4GEBHEJ_rS4zog/exec', gdriveToken: '',
             supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
-            baseUrl: 'https://api.my-server.kr', token: '',
+            baseUrl: '', token: '',
             listingsEndpoint: '/api/listings', uploadEndpoint: '/api/upload'
         };
 
@@ -1393,8 +1447,16 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             renderCustomersList();
             lucide.createIcons();
 
-            if (serverConfig.mode === 'supabase' && serverConfig.supabaseUrl && serverConfig.supabaseAnonKey) {
-                await initSupabaseRealtime();
+            // 공유 데이터의 기준은 Google Apps Script → Google Sheets/Drive입니다.
+            // localStorage는 화면 캐시/오프라인 보조 저장용으로만 사용합니다.
+            if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                cloudSyncBusy = true;
+                const result = await pullFromGoogleDrive(true);
+                cloudSyncReady = Boolean(result && result.ok !== false);
+                cloudSyncBusy = false;
+                updateStorageStatusBadge();
+            } else {
+                cloudSyncReady = false;
             }
 
             document.addEventListener('click', (e) => {
@@ -1416,11 +1478,17 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
         });
 
         function loadAdminState() {
-            if (!localStorage.getItem(ADMIN_PWD_KEY)) localStorage.setItem(ADMIN_PWD_KEY, '1234');
+            // 관리자 비밀번호의 최종 기준은 Google Sheets의 adminPassword입니다.
+            // localStorage 값은 초기 로딩 전 임시 캐시일 뿐이며, 클라우드 동기화 후 덮어씌워집니다.
+            sharedAdminPassword = localStorage.getItem(ADMIN_PWD_KEY) || null;
             isAdminMode = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
         }
 
         function requireAdminGuard() {
+            if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl && !cloudSyncReady) {
+                showToast(cloudSyncBusy ? '공유 데이터 동기화가 끝날 때까지 잠시만 기다려 주세요.' : 'Google Sheets 연결을 먼저 설정해 주세요.', 'error');
+                return false;
+            }
             if (isAdminMode) return true;
             showToast('관리자 권한이 필요합니다. 상단에서 관리자 잠금을 해제해 주세요.', 'error');
             openAdminAuthModal();
@@ -1453,7 +1521,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
         function submitAdminAuth(e) {
             e.preventDefault();
             const inputPwd = document.getElementById('adminPasswordInput').value;
-            const savedPwd = localStorage.getItem(ADMIN_PWD_KEY) || '1234';
+            const savedPwd = sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '1234';
             if (inputPwd === savedPwd) {
                 isAdminMode = true;
                 sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
@@ -1488,8 +1556,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
                 currentStaffUser = updated || null;
                 if (!currentStaffUser) sessionStorage.removeItem(STAFF_SESSION_KEY);
             }
-            if (!skipCloudSync && serverConfig.mode === 'supabase' && supabaseClient) syncAllStaffToSupabase();
-            else if (!skipCloudSync && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) syncStaffToGoogleDrive();
+            if (!skipCloudSync && cloudSyncReady && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) syncAllDataToGoogleSheets('staff');
         }
 
         function updateAdminUI() {
@@ -1658,6 +1725,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             if (!requireAdminGuard()) return;
             requireApprovedStaffGate = Boolean(checked);
             localStorage.setItem(STAFF_GATE_CFG_KEY, String(requireApprovedStaffGate));
+            if (serverConfig.mode === 'supabase' && supabaseClient) syncAppSettingsToSupabase();
             updateAccessGateUI();
         }
 
@@ -1758,6 +1826,9 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             try {
                 localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
                 schedulePcFolderAutoSave();
+                if (cloudSyncReady && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                    syncAllDataToGoogleSheets('customers');
+                }
             } catch (e) {
                 showToast('고객 데이터 저장 중 오류가 발생했습니다.', 'error');
             }
@@ -1935,7 +2006,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
 
             if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
                 dot.className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
-                label.textContent = '· 구글 드라이브 저장중';
+                label.textContent = cloudSyncReady ? '· 구글 시트 공유중' : '· 구글 시트 연결 대기';
             } else if (serverConfig.mode === 'supabase' && serverConfig.supabaseUrl) {
                 dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
                 label.textContent = '· 직원 실시간 공유중';
@@ -1986,6 +2057,9 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
                 schedulePcFolderAutoSave();
+                if (cloudSyncReady && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                    syncAllDataToGoogleSheets('properties');
+                }
             } catch (e) {
                 showToast('브라우저 저장 용량이 부족합니다.', 'error');
             }
@@ -2044,7 +2118,7 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
         async function saveServerConfig() {
             if (!requireAdminGuard()) return;
             serverConfig = {
-                mode: document.querySelector('input[name="storageModeRadio"]:checked')?.value || 'local',
+                mode: 'gdrive',
                 gdriveWebAppUrl: document.getElementById('cfgGdriveWebAppUrl').value.trim(),
                 gdriveToken: document.getElementById('cfgGdriveToken').value.trim(),
                 supabaseUrl: document.getElementById('cfgSupabaseUrl').value.trim().replace(/\/+$/, ''),
@@ -2062,12 +2136,26 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
                     showToast('새 관리자 비밀번호는 4자 이상으로 입력해 주세요.', 'error');
                     return;
                 }
+                sharedAdminPassword = newPwd;
                 localStorage.setItem(ADMIN_PWD_KEY, newPwd);
+                if (serverConfig.gdriveWebAppUrl) {
+                    await syncAdminConfigToGoogleDrive(newPwd);
+                }
+                if (serverConfig.mode === 'supabase' && supabaseClient) await syncAppSettingsToSupabase();
                 showToast('관리자 비밀번호와 저장소 설정이 저장되었습니다.');
             } else {
+                if (serverConfig.gdriveWebAppUrl) {
+                    await syncStaffToGoogleDrive();
+                }
                 showToast('저장소 설정이 저장되었습니다.');
             }
-            if (serverConfig.mode === 'supabase') await initSupabaseRealtime();
+            cloudSyncReady = false;
+            if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                cloudSyncBusy = true;
+                const result = await pullFromGoogleDrive(true);
+                cloudSyncReady = Boolean(result && result.ok !== false);
+                cloudSyncBusy = false;
+            }
             updateStorageStatusBadge();
             closeServerModal();
         }
@@ -2076,18 +2164,148 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             try {
                 if (!serverConfig.supabaseUrl || !serverConfig.supabaseAnonKey || !window.supabase) return false;
                 supabaseClient = window.supabase.createClient(serverConfig.supabaseUrl, serverConfig.supabaseAnonKey);
-                const { data: propRows } = await supabaseClient.from('hl_properties').select('id, data').order('updated_at', { ascending: false });
-                if (Array.isArray(propRows) && propRows.length > 0) {
-                    properties = propRows.map(r => r.data).filter(Boolean);
+
+                // 중앙 DB를 단일 기준으로 읽습니다. 로컬 localStorage는 캐시로만 사용합니다.
+                const [propRes, custRes, staffRes, settingRes] = await Promise.all([
+                    supabaseClient.from('hl_properties').select('id, data, updated_at').order('updated_at', { ascending: false }),
+                    supabaseClient.from('hl_customers').select('id, data, updated_at').order('updated_at', { ascending: false }),
+                    supabaseClient.from('hl_staff_accounts').select('id, data, updated_at').order('updated_at', { ascending: false }),
+                    supabaseClient.from('hl_app_settings').select('id, data, updated_at').eq('id', 'global').maybeSingle()
+                ]);
+
+                if (propRes.error) throw propRes.error;
+                if (custRes.error) throw custRes.error;
+                if (staffRes.error) throw staffRes.error;
+
+                if (Array.isArray(propRes.data) && propRes.data.length) {
+                    properties = propRes.data.map(r => r.data).filter(Boolean);
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
                 }
+                if (Array.isArray(custRes.data) && custRes.data.length) {
+                    customers = custRes.data.map(r => r.data).filter(Boolean);
+                    localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
+                }
+                if (Array.isArray(staffRes.data) && staffRes.data.length) {
+                    staffAccounts = staffRes.data.map(r => r.data).filter(Boolean);
+                    localStorage.setItem(STAFF_ACCOUNTS_KEY, JSON.stringify(staffAccounts));
+                    const savedSessionId = sessionStorage.getItem(STAFF_SESSION_KEY);
+                    currentStaffUser = savedSessionId ? (staffAccounts.find(s => s.id === savedSessionId) || null) : null;
+                }
+
+                if (!settingRes.error && settingRes.data?.data) {
+                    const settings = settingRes.data.data;
+                    if (typeof settings.adminPassword === 'string' && settings.adminPassword.length >= 4) {
+                        sharedAdminPassword = settings.adminPassword;
+                        localStorage.setItem(ADMIN_PWD_KEY, sharedAdminPassword);
+                    }
+                    if (typeof settings.requireApprovedStaffGate === 'boolean') {
+                        requireApprovedStaffGate = settings.requireApprovedStaffGate;
+                        localStorage.setItem(STAFF_GATE_CFG_KEY, String(requireApprovedStaffGate));
+                    }
+                }
+
+                subscribeSupabaseRealtime();
                 renderAll();
+                renderCustomersList();
+                updateAdminUI();
+                updateAccessGateUI();
                 return true;
-            } catch (e) { return false; }
+            } catch (e) {
+                console.warn('Supabase 초기 동기화 실패:', e);
+                showToast('Supabase 연결은 되었지만 중앙 데이터 불러오기에 실패했습니다.', 'error');
+                return false;
+            }
+        }
+
+        function subscribeSupabaseRealtime() {
+            if (!supabaseClient) return;
+            if (supabaseRealtimeChannel) {
+                try { supabaseClient.removeChannel(supabaseRealtimeChannel); } catch (e) {}
+            }
+            supabaseRealtimeChannel = supabaseClient.channel('hl-crm-global-sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_properties' }, payload => {
+                    applyPropertyRealtimePayload(payload);
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_customers' }, payload => {
+                    applyCustomerRealtimePayload(payload);
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_staff_accounts' }, payload => {
+                    applyStaffRealtimePayload(payload);
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_app_settings' }, payload => {
+                    applySettingsRealtimePayload(payload);
+                })
+                .subscribe();
+        }
+
+        function applyPropertyRealtimePayload(payload) {
+            const row = payload.new || payload.old;
+            const id = row?.id;
+            if (!id) return;
+            if (payload.eventType === 'DELETE') {
+                properties = properties.filter(p => p.id !== id);
+            } else if (payload.new?.data) {
+                const next = payload.new.data;
+                const idx = properties.findIndex(p => p.id === id);
+                if (idx >= 0) properties[idx] = next; else properties.unshift(next);
+            }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
+            renderAll();
+        }
+
+        function applyCustomerRealtimePayload(payload) {
+            const row = payload.new || payload.old;
+            const id = row?.id;
+            if (!id) return;
+            if (payload.eventType === 'DELETE') {
+                customers = customers.filter(c => c.id !== id);
+            } else if (payload.new?.data) {
+                const next = payload.new.data;
+                const idx = customers.findIndex(c => c.id === id);
+                if (idx >= 0) customers[idx] = next; else customers.unshift(next);
+            }
+            localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
+            renderCustomersList();
+        }
+
+        function applyStaffRealtimePayload(payload) {
+            const row = payload.new || payload.old;
+            const id = row?.id;
+            if (!id) return;
+            if (payload.eventType === 'DELETE') {
+                staffAccounts = staffAccounts.filter(s => s.id !== id);
+            } else if (payload.new?.data) {
+                const next = payload.new.data;
+                const idx = staffAccounts.findIndex(s => s.id === id);
+                if (idx >= 0) staffAccounts[idx] = next; else staffAccounts.unshift(next);
+            }
+            localStorage.setItem(STAFF_ACCOUNTS_KEY, JSON.stringify(staffAccounts));
+            const sessionId = sessionStorage.getItem(STAFF_SESSION_KEY);
+            currentStaffUser = sessionId ? (staffAccounts.find(s => s.id === sessionId) || null) : null;
+            updateAdminUI();
+            updateAccessGateUI();
+            if (!document.getElementById('staffAdminModalBackdrop')?.classList.contains('hidden')) renderStaffAdminModal();
+        }
+
+        function applySettingsRealtimePayload(payload) {
+            if (payload.eventType === 'DELETE' || !payload.new?.data) return;
+            const settings = payload.new.data;
+            if (typeof settings.adminPassword === 'string' && settings.adminPassword.length >= 4) {
+                sharedAdminPassword = settings.adminPassword;
+                localStorage.setItem(ADMIN_PWD_KEY, sharedAdminPassword);
+            }
+            if (typeof settings.requireApprovedStaffGate === 'boolean') {
+                requireApprovedStaffGate = settings.requireApprovedStaffGate;
+                localStorage.setItem(STAFF_GATE_CFG_KEY, String(requireApprovedStaffGate));
+                updateAccessGateUI();
+            }
         }
 
         async function upsertSinglePropertyToSupabase(prop) {
-            if (supabaseClient && prop?.id) await supabaseClient.from('hl_properties').upsert({ id: prop.id, data: prop, updated_at: new Date().toISOString() });
+            if (supabaseClient && prop?.id) {
+                const { error } = await supabaseClient.from('hl_properties').upsert({ id: prop.id, data: prop, updated_at: new Date().toISOString() });
+                if (error) console.warn('매물 Supabase 저장 실패:', error);
+            }
         }
 
         async function deleteSinglePropertyFromSupabase(id) {
@@ -2103,7 +2321,27 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
         }
 
         async function syncAllStaffToSupabase() {
-            if (supabaseClient && staffAccounts.length > 0) await supabaseClient.from('hl_staff_accounts').upsert(staffAccounts.map(s => ({ id: s.id, data: s, updated_at: new Date().toISOString() })));
+            if (!supabaseClient) return;
+            if (staffAccounts.length) await supabaseClient.from('hl_staff_accounts').upsert(staffAccounts.map(s => ({ id: s.id, data: s, updated_at: new Date().toISOString() })));
+        }
+
+        async function syncAllPropertiesToSupabase() {
+            if (!supabaseClient || !properties.length) return;
+            await supabaseClient.from('hl_properties').upsert(properties.map(p => ({ id: p.id, data: p, updated_at: new Date().toISOString() })));
+        }
+
+        async function syncAllCustomersToSupabase() {
+            if (!supabaseClient || !customers.length) return;
+            await supabaseClient.from('hl_customers').upsert(customers.map(c => ({ id: c.id, data: c, updated_at: new Date().toISOString() })));
+        }
+
+        async function syncAppSettingsToSupabase() {
+            if (!supabaseClient) return;
+            const data = {
+                adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '1234',
+                requireApprovedStaffGate: Boolean(requireApprovedStaffGate)
+            };
+            await supabaseClient.from('hl_app_settings').upsert({ id: 'global', data, updated_at: new Date().toISOString() });
         }
 
         async function testSupabaseConnection() {
@@ -2127,10 +2365,18 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             if (!requireAdminGuard()) return;
             const url = document.getElementById('cfgSupabaseUrl').value.trim().replace(/\/+$/, '') || serverConfig.supabaseUrl;
             const key = document.getElementById('cfgSupabaseAnonKey').value.trim() || serverConfig.supabaseAnonKey;
+            if (!url || !key) { showToast('Supabase URL과 Anon Key를 먼저 입력해 주세요.', 'error'); return; }
             const client = window.supabase.createClient(url, key);
-            if (properties.length > 0) await client.from('hl_properties').upsert(properties.map(p => ({ id: p.id, data: p, updated_at: new Date().toISOString() })));
-            if (staffAccounts.length > 0) await client.from('hl_staff_accounts').upsert(staffAccounts.map(s => ({ id: s.id, data: s, updated_at: new Date().toISOString() })));
-            showToast('Supabase로 업로드 완료');
+            const now = new Date().toISOString();
+            const results = await Promise.all([
+                client.from('hl_properties').upsert(properties.map(p => ({ id: p.id, data: p, updated_at: now }))),
+                client.from('hl_customers').upsert(customers.map(c => ({ id: c.id, data: c, updated_at: now }))),
+                client.from('hl_staff_accounts').upsert(staffAccounts.map(s => ({ id: s.id, data: s, updated_at: now }))),
+                client.from('hl_app_settings').upsert({ id: 'global', data: { adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '1234', requireApprovedStaffGate: Boolean(requireApprovedStaffGate) }, updated_at: now })
+            ]);
+            const failed = results.find(r => r.error);
+            if (failed?.error) { showToast(`Supabase 업로드 실패: ${failed.error.message}`, 'error'); return; }
+            showToast('매물 · 고객 · 직원 · 관리자 설정을 Supabase에 업로드했습니다.');
         }
 
         function copySupabaseSetupSql() {
@@ -2146,72 +2392,155 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
 
         function exportConfiguredHtmlForStaff() {
             if (!requireAdminGuard()) return;
-            const blob = new Blob(['<!DOCTYPE html>\n' + document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
+            const html = document.documentElement.outerHTML.replace(
+                'const EMBEDDED_SHARED_CONFIG = null;',
+                `const EMBEDDED_SHARED_CONFIG = ${JSON.stringify(serverConfig)};`
+            );
+            const blob = new Blob(['<!DOCTYPE html>\n' + html], { type: 'text/html;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `HL_CRM_배포용_${getTodayDateStr()}.html`;
+            a.download = `HL_CRM_공유배포용_${getTodayDateStr()}.html`;
             a.click();
             URL.revokeObjectURL(url);
+            showToast('현재 Supabase 연결 설정이 내장된 직원용 HTML을 만들었습니다.');
         }
 
-        async function testGoogleDriveConnection() {
-            const url = document.getElementById('cfgGdriveWebAppUrl').value.trim();
-            const box = document.getElementById('serverPingResult');
-            box.classList.remove('hidden');
+        function getActiveGdriveUrl() {
+            const inputUrl = document.getElementById('cfgGdriveWebAppUrl')?.value?.trim();
+            return inputUrl || serverConfig.gdriveWebAppUrl || '';
+        }
+
+        function applyGoogleDrivePayload(data, silent = false) {
+            let syncedAny = false;
+            if (Array.isArray(data.listings)) {
+                properties = data.listings;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
+                syncedAny = true;
+            }
+            if (Array.isArray(data.customers)) {
+                customers = data.customers;
+                localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
+                syncedAny = true;
+            }
+            if (Array.isArray(data.staffAccounts)) {
+                staffAccounts = data.staffAccounts;
+                saveStaffAccounts(true);
+                if (currentStaffUser) {
+                    const matched = staffAccounts.find(s => s.id === currentStaffUser.id || s.username === currentStaffUser.username);
+                    currentStaffUser = matched || null;
+                    if (currentStaffUser) sessionStorage.setItem(STAFF_SESSION_KEY, currentStaffUser.id);
+                    else sessionStorage.removeItem(STAFF_SESSION_KEY);
+                }
+                updateAdminUI();
+                updateAccessGateUI();
+                syncedAny = true;
+            }
+            if (data.adminPassword && typeof data.adminPassword === 'string' && data.adminPassword.length >= 4) {
+                sharedAdminPassword = data.adminPassword;
+                localStorage.setItem(ADMIN_PWD_KEY, data.adminPassword);
+                syncedAny = true;
+            }
+            if (syncedAny) {
+                renderAll();
+                renderCustomersList();
+                if (!silent) showToast('구글 시트와 동기화되었습니다.');
+            }
+            return syncedAny;
+        }
+
+        async function pullFromGoogleDrive(silent = false) {
+            const url = getActiveGdriveUrl();
+            if (!url) return { ok: false, message: '웹 앱 URL이 비어 있습니다.' };
             try {
                 const res = await fetch(url);
                 const data = await res.json();
-                if (!data.ok) throw new Error(data.message);
-                if (Array.isArray(data.listings) && data.listings.length > 0) { properties = data.listings; localStorage.setItem(STORAGE_KEY, JSON.stringify(properties)); }
-                renderAll();
+                if (!data.ok) throw new Error(data.message || '구글 시트 불러오기 실패');
+                applyGoogleDrivePayload(data, silent);
+                cloudSyncReady = true;
+                return data;
+            } catch (err) {
+                if (!silent) showToast(`구글 시트 불러오기 오류: ${err.message}`, 'error');
+                return { ok: false, message: err.message };
+            }
+        }
+
+        async function testGoogleDriveConnection() {
+            const url = getActiveGdriveUrl();
+            const box = document.getElementById('serverPingResult');
+            box.classList.remove('hidden');
+            try {
+                if (!url) throw new Error('구글 앱스 스크립트 웹 앱(/exec) 주소를 입력해 주세요.');
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.message || '연결 실패');
+                applyGoogleDrivePayload(data, true);
                 box.className = 'text-xs p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800';
-                box.textContent = `✓ 구글 드라이브 연결 성공 (${(data.listings || []).length}건)`;
+                box.textContent = `✓ 구글 시트 연결 및 동기화 성공 (매물 ${(data.listings || []).length}건 · 고객 ${(data.customers || []).length}건 · 직원 ${(data.staffAccounts || []).length}명)`;
             } catch (err) {
                 box.className = 'text-xs p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800';
                 box.textContent = `✕ 연결 실패: ${err.message}`;
             }
         }
 
-        function getActiveGdriveUrl() {
-            const inputEl = document.getElementById('cfgGdriveWebAppUrl');
-            const fromInput = inputEl ? inputEl.value.trim() : '';
-            return fromInput || (serverConfig && serverConfig.gdriveWebAppUrl ? serverConfig.gdriveWebAppUrl.trim() : '');
+        async function syncAllDataToGoogleSheets(changedType = 'all') {
+            const url = getActiveGdriveUrl();
+            if (!url || !cloudSyncReady) return;
+            if (cloudSyncBusy) return;
+            cloudSyncBusy = true;
+            try {
+                const currentAdminPwd = sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '';
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'BULK_SYNC',
+                        listings: properties,
+                        customers,
+                        staffAccounts,
+                        adminPassword: currentAdminPwd,
+                        changedType
+                    })
+                });
+                const data = await res.json().catch(() => ({ ok: true }));
+                if (data && data.ok === false) throw new Error(data.message || '구글 시트 저장 실패');
+            } catch (err) {
+                console.error('Google Sheets sync failed:', err);
+                showToast(`공유 데이터 저장 실패: ${err.message}`, 'error');
+            } finally {
+                cloudSyncBusy = false;
+            }
         }
 
         async function pushLocalToGoogleDrive() {
             if (!requireAdminGuard()) return;
             const url = getActiveGdriveUrl();
+            const box = document.getElementById('serverPingResult');
             if (!url) {
-                showToast('구글 드라이브 웹 앱(/exec) 주소를 먼저 입력하세요.');
+                showToast('구글 앱스 스크립트 웹 앱(/exec) 주소를 먼저 입력해 주세요.', 'error');
                 return;
             }
             try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'BULK_SYNC', listings: properties, staffAccounts })
-                });
-                const data = await res.json();
-                if (!data.ok) throw new Error(data.message || '시트 저장 실패');
-                showToast('구글 드라이브에 저장되었습니다.');
+                await syncAllDataToGoogleSheets('manual');
+                if (box) {
+                    box.classList.remove('hidden');
+                    box.className = 'text-xs p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800';
+                    box.textContent = `✓ 구글 시트 일괄 저장 완료 (매물 ${properties.length}건 · 고객 ${customers.length}건 · 직원 ${staffAccounts.length}명)`;
+                }
+                showToast('구글 시트에 매물·고객·직원·관리자 설정을 저장했습니다.');
             } catch (err) {
-                showToast(`시트 저장 오류: ${err.message}`);
+                showToast(`구글 시트 저장 오류: ${err.message}`, 'error');
             }
         }
 
         async function syncStaffToGoogleDrive() {
-            const url = getActiveGdriveUrl();
-            if (!url) return;
-            try {
-                await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'SYNC_STAFF', staffAccounts })
-                });
-            } catch (err) {
-                console.error('직원 동기화 오류:', err);
-            }
+            await syncAllDataToGoogleSheets('staff');
+        }
+
+        async function syncAdminConfigToGoogleDrive(adminPassword) {
+            sharedAdminPassword = adminPassword;
+            localStorage.setItem(ADMIN_PWD_KEY, adminPassword);
+            await syncAllDataToGoogleSheets('admin');
         }
 
         async function testServerConnection() {
@@ -2234,7 +2563,8 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             if (!requireAdminGuard()) return;
             const baseUrl = document.getElementById('cfgServerBaseUrl').value.trim().replace(/\/+$/, '');
             const endpoint = document.getElementById('cfgListingsEndpoint').value.trim() || '/api/listings';
-            await fetch(`${baseUrl}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'BULK_SYNC', listings: properties }) });
+            const adminPassword = localStorage.getItem(ADMIN_PWD_KEY) || '1234';
+            await fetch(`${baseUrl}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'BULK_SYNC', listings: properties, staffAccounts, adminPassword }) });
             showToast('서버 일괄 업로드 완료');
         }
 
@@ -2242,29 +2572,10 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             if (serverConfig.mode === 'supabase' && supabaseClient) {
                 if (action === 'UPSERT' && payloadObj.property) await upsertSinglePropertyToSupabase(payloadObj.property);
                 else if (action === 'DELETE' && payloadObj.propertyId) await deleteSinglePropertyFromSupabase(payloadObj.propertyId);
-                return;
-            }
-            if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
-                await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, ...payloadObj })
-                }).catch(() => {});
-                return;
-            }
-            const gdriveUrl = getActiveGdriveUrl();
-            if (gdriveUrl) {
-                try {
-                    const res = await fetch(gdriveUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ action, ...payloadObj })
-                    });
-                    const data = await res.json();
-                    if (!data.ok) throw new Error(data.message || '시트 반영 실패');
-                } catch (err) {
-                    showToast(`시트 반영 오류: ${err.message}`);
-                }
+            } else if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
+                await fetch(serverConfig.gdriveWebAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
+            } else if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
+                await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
             }
         }
 
@@ -2940,30 +3251,5 @@ alter publication supabase_realtime add table public.hl_staff_accounts;</pre>
             return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
         }
     </script>
-    <script>
-(async function () {
-  const cfg = JSON.parse(localStorage.getItem('promanager_server_config_v1') || '{}');
-  const url = (cfg.scriptUrl || cfg.url || cfg.endpoint || '').trim();
-  if (!url || !url.includes('/exec')) return;
-
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    const data = await res.json();
-    if (!data || data.ok === false) return;
-
-    if (Array.isArray(data.listings)) {
-      localStorage.setItem('promanager_commercial_properties_v2', JSON.stringify(data.listings));
-    }
-    if (Array.isArray(data.staffAccounts)) {
-      localStorage.setItem('promanager_staff_accounts_v1', JSON.stringify(data.staffAccounts));
-    }
-    if (data.adminPassword) {
-      localStorage.setItem('promanager_admin_pwd_v1', JSON.stringify(data.adminPassword));
-    }
-  } catch (e) {
-    console.warn('자동 동기화 실패:', e);
-  }
-})();
-</script>
 </body>
 </html>
