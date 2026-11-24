@@ -64,6 +64,7 @@
         /* HL CRM 공유형 운영: Google Sheets/Drive만 사용합니다. Supabase 설정 UI는 비활성화합니다. */
         .supabase-config-section { display:none !important; }
 </style>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
 
@@ -158,6 +159,14 @@
                             </span>
                             <i data-lucide="lock" class="admin-lock-icon w-3.5 h-3.5 text-slate-400"></i>
                             <input type="file" id="jsonImportInput" accept=".json" class="hidden" onchange="importJSON(event)">
+                        </div>
+                        <div id="btnImportExcelWrapper" onclick="handleImportExcelClick()" class="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between cursor-pointer transition">
+                            <span class="flex items-center gap-2.5">
+                                <i data-lucide="file-up" class="w-4 h-4 text-emerald-600"></i>
+                                <span>엑셀 매물 일괄등록</span>
+                            </span>
+                            <i data-lucide="lock" class="admin-lock-icon w-3.5 h-3.5 text-slate-400"></i>
+                            <input type="file" id="excelImportInput" accept=".xlsx,.xls" class="hidden" onchange="importListingsFromExcel(event)">
                         </div>
                         <div class="my-1 border-t border-slate-100"></div>
                         <button type="button" id="btnResetSample" onclick="handleResetSampleClick()" class="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between transition">
@@ -3444,6 +3453,288 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             if (activeDrawerPropertyId === id) closeDetailDrawer();
             renderAll();
             showToast('매물이 삭제되었습니다.');
+        }
+
+        // ===== 엑셀 매물 일괄등록 =====
+        function handleImportExcelClick() {
+            if (!requireAdminGuard()) return;
+            const input = document.getElementById('excelImportInput');
+            if (input) {
+                input.value = '';
+                input.click();
+            }
+        }
+
+        function excelText(v) {
+            if (v === null || v === undefined) return '';
+            if (v instanceof Date) return v.toISOString().slice(0, 10);
+            return String(v).trim();
+        }
+
+        function excelNumber(v) {
+            if (v === null || v === undefined || v === '') return 0;
+            if (typeof v === 'number' && Number.isFinite(v)) return v;
+            const text = excelText(v).replace(/,/g, '');
+            const m = text.match(/-?\d+(?:\.\d+)?/);
+            return m ? Number(m[0]) : 0;
+        }
+
+        function excelNumberStrict(v) {
+            if (v === null || v === undefined || v === '') return null;
+            if (typeof v === 'number' && Number.isFinite(v)) return v;
+            const text = excelText(v).replace(/,/g, '');
+            if (/^(무권리|없음|없다|-)$/i.test(text)) return 0;
+            const m = text.match(/^\s*(-?\d+(?:\.\d+)?)\s*(?:만원|만)?\s*$/);
+            return m ? Number(m[1]) : null;
+        }
+
+        function excelAdStatus(row) {
+            const n = excelText(row['네이버']).toUpperCase();
+            const d = excelText(row['당근']).toUpperCase();
+            const yes = v => ['O','○','Y','YES','1','TRUE','있음'].includes(v);
+            if (yes(n) && yes(d)) return '네이버 및 당근';
+            if (yes(n)) return '네이버';
+            if (yes(d)) return '당근';
+            return '광고대기중';
+        }
+
+        function excelStatus(v) {
+            const t = excelText(v);
+            if (['진행가능','진행 가능'].includes(t)) return '계약가능';
+            if (['거래완료'].includes(t)) return '계약완료';
+            return ['계약가능','협의중','계약완료','타부동산','보류'].includes(t) ? t : '계약가능';
+        }
+
+        function excelFloor(v) {
+            const t = excelText(v);
+            if (!t) return { category: '1F', text: '' };
+            if (/지하|^B\d*$/i.test(t)) return { category: 'BASEMENT', text: t };
+            if (/^\d+(?:\.\d+)?$/.test(t)) {
+                const n = Number(t);
+                return { category: n <= 1 ? '1F' : 'UPPER', text: t };
+            }
+            if (/지하|B\d/i.test(t)) return { category: 'BASEMENT', text: t };
+            return { category: 'UPPER', text: t };
+        }
+
+        function excelElevator(v) {
+            const t = excelText(v);
+            if (!t) return '있음';
+            if (/없|x|no/i.test(t)) return '없음';
+            if (/화물/i.test(t)) return '화물용 포함';
+            return '있음';
+        }
+
+        function excelTitle(row, type) {
+            const title = excelText(row['매물명/건물명'] || row['건물명']);
+            if (title) return title;
+            return excelText(row['매물주소']);
+        }
+
+        function excelDescription(row, type) {
+            return excelText(row['매물특징 및 브리핑 포인트'] || row['기타']);
+        }
+
+        function convertExcelRow(row, type, sheetName, rowNumber) {
+            const id = excelText(row['매물번호']);
+            if (!id) return { error: `${sheetName} ${rowNumber}행: 매물번호가 없습니다.` };
+
+            const floorRaw = row['상세층수표기'] ?? row['층수'];
+            const floor = excelFloor(floorRaw);
+
+            const maintenanceRaw = row['관리비'];
+            const maintenance = excelNumberStrict(maintenanceRaw);
+            const warnings = [];
+
+            if (maintenance === null && excelText(maintenanceRaw)) {
+                warnings.push(`관리비 "${excelText(maintenanceRaw)}"는 숫자로 자동 변환하지 않았습니다.`);
+            }
+
+            const depositRaw = row['보증금'];
+            let deposit = excelNumberStrict(depositRaw);
+            if (deposit === null) {
+                const txt = excelText(depositRaw);
+                const m = txt.match(/(\d+(?:\.\d+)?)/);
+                deposit = m ? Number(m[1]) : 0;
+                if (txt) warnings.push(`보증금 "${txt}"를 ${deposit}으로 변환했습니다.`);
+            }
+
+            let rent = excelNumberStrict(row['월세']);
+            if (rent === null) {
+                rent = 0;
+                if (excelText(row['월세'])) warnings.push(`월세 "${excelText(row['월세'])}"는 0으로 처리했습니다.`);
+            }
+
+            let premium = 0;
+            if (type === '상가') {
+                premium = excelNumberStrict(row['권리금']);
+                if (premium === null) {
+                    const txt = excelText(row['권리금']);
+                    premium = /무권리|없음|없다/i.test(txt) ? 0 : 0;
+                    if (txt && premium === 0) warnings.push(`권리금 "${txt}"는 0으로 처리했습니다.`);
+                }
+            }
+
+            const area = excelNumber(row['면적']);
+            const title = excelTitle(row, type);
+            const address = excelText(row['매물주소']);
+
+            if (!address) warnings.push('주소가 비어 있습니다.');
+            if (!title) warnings.push('매물명이 비어 있습니다.');
+
+            const property = {
+                id,
+                adStatus: type === '상가' ? excelAdStatus(row) : '광고대기중',
+                title,
+                type,
+                status: excelStatus(row['진행상태']),
+                address,
+                floorCategory: floor.category,
+                floorText: floor.text,
+                areaSqm: pyeongToSqm(area),
+                deposit: deposit || 0,
+                rent: rent || 0,
+                maintenance: maintenance === null ? 0 : maintenance,
+                premium: premium || 0,
+                moveIn: excelText(row['입주가능일']) || '협의',
+                parking: excelText(row['주차']),
+                rooms: excelText(row['방개수']),
+                bathrooms: excelText(row['화장실개수']),
+                elevator: excelElevator(row['엘베']),
+                recommendedUse: '',
+                agent: excelText(row['담당자']),
+                ownerContact: excelText(row['임대인 연락처']),
+                description: excelDescription(row, type),
+                photos: []
+            };
+
+            if (excelText(row['임차인 연락처'])) {
+                warnings.push('임차인 연락처는 현재 CRM에 별도 필드가 없어 가져오지 않았습니다.');
+            }
+
+            if (maintenance === null && excelText(maintenanceRaw)) {
+                property.description = [property.description, `관리비 원문: ${excelText(maintenanceRaw)}`].filter(Boolean).join('\n');
+            }
+
+            return { property, warnings };
+        }
+
+        async function importListingsFromExcel(event) {
+            if (!requireAdminGuard()) return;
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            try {
+                if (typeof XLSX === 'undefined') throw new Error('엑셀 읽기 모듈을 불러오지 못했습니다. 페이지를 새로고침 후 다시 시도해 주세요.');
+
+                showToast('엑셀 파일을 읽는 중입니다...');
+                const buffer = await file.arrayBuffer();
+                const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+
+                const targets = [
+                    { sheet: '상가임대', type: '상가' },
+                    { sheet: '원룸월세', type: '원룸' },
+                    { sheet: '주택월세', type: '주택' }
+                ];
+
+                const imported = [];
+                const warnings = [];
+                const errors = [];
+                const seen = new Set();
+
+                for (const target of targets) {
+                    const ws = workbook.Sheets[target.sheet];
+                    if (!ws) continue;
+
+                    // 현재 엑셀은 4행이 헤더이므로 A4부터 읽습니다.
+                    const rows = XLSX.utils.sheet_to_json(ws, { range: 3, defval: '', raw: true });
+                    rows.forEach((row, idx) => {
+                        const rowNumber = idx + 5;
+                        if (!excelText(row['매물번호']) && !excelText(row['매물주소'])) return;
+
+                        const result = convertExcelRow(row, target.type, target.sheet, rowNumber);
+                        if (result.error) {
+                            errors.push(result.error);
+                            return;
+                        }
+
+                        if (seen.has(result.property.id)) {
+                            warnings.push(`${result.property.id}: 엑셀 안에서 중복 매물번호가 있어 마지막 자료만 사용합니다.`);
+                            const oldIndex = imported.findIndex(p => p.id === result.property.id);
+                            if (oldIndex >= 0) imported[oldIndex] = result.property;
+                        } else {
+                            seen.add(result.property.id);
+                            imported.push(result.property);
+                        }
+
+                        (result.warnings || []).forEach(w => warnings.push(`${result.property.id}: ${w}`));
+                    });
+                }
+
+                if (!imported.length) {
+                    alert('가져올 매물이 없습니다.\n\n매물번호가 있는 행인지 확인해 주세요.');
+                    return;
+                }
+
+                const existingById = new Map(properties.map(p => [String(p.id), p]));
+                let added = 0;
+                let updated = 0;
+
+                imported.forEach(p => {
+                    const old = existingById.get(String(p.id));
+                    if (old) {
+                        existingById.set(String(p.id), { ...old, ...p, photos: old.photos || [] });
+                        updated++;
+                    } else {
+                        existingById.set(String(p.id), { ...p, createdAt: new Date().toISOString(), memos: [] });
+                        added++;
+                    }
+                });
+
+                const previewWarnings = warnings.slice(0, 12).map(w => `• ${w}`).join('\n');
+                const moreWarning = warnings.length > 12 ? `\n… 외 ${warnings.length - 12}건` : '';
+                const message =
+                    `엑셀 매물 ${imported.length}건을 확인했습니다.\n\n` +
+                    `신규 등록: ${added}건\n` +
+                    `기존 매물 업데이트: ${updated}건\n` +
+                    `변환 주의사항: ${warnings.length}건\n` +
+                    `변환 오류: ${errors.length}건\n\n` +
+                    (previewWarnings ? `주의사항 일부:\n${previewWarnings}${moreWarning}\n\n` : '') +
+                    `백업 시트는 가져오지 않습니다.\n기존 사진은 유지합니다.\n\n이대로 CRM에 반영하시겠습니까?`;
+
+                if (!confirm(message)) return;
+
+                properties = Array.from(existingById.values());
+                saveToStorage();
+                renderAll();
+
+                // 기존 전체 BULK_SYNC를 사용하지 않고, 매물별 UPSERT만 실행하여 기존 데이터가 지워지지 않도록 합니다.
+                let synced = 0;
+                for (const p of imported) {
+                    await syncPropertyWithServer('UPSERT', { property: existingById.get(String(p.id)) });
+                    synced++;
+                    if (synced % 10 === 0 || synced === imported.length) {
+                        showToast(`엑셀 매물 저장 중... ${synced}/${imported.length}`);
+                    }
+                }
+
+                showToast(`엑셀 매물 ${imported.length}건을 반영했습니다. 신규 ${added}건 · 업데이트 ${updated}건`);
+                if (warnings.length || errors.length) {
+                    console.warn('[HL CRM 엑셀 가져오기]', { warnings, errors });
+                    setTimeout(() => alert(
+                        `엑셀 가져오기가 완료되었습니다.\n\n` +
+                        `반영: ${imported.length}건\n` +
+                        `신규: ${added}건\n` +
+                        `업데이트: ${updated}건\n` +
+                        `주의사항: ${warnings.length}건\n` +
+                        `오류로 제외: ${errors.length}건\n\n` +
+                        (errors.length ? `제외된 행:\n${errors.slice(0, 10).join('\n')}` : '제외된 행은 없습니다.')
+                    ), 150);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast(`엑셀 가져오기 실패: ${err.message}`, 'error');
+            }
         }
 
         function toggleDataMenu() { document.getElementById('dataMenuDropdown').classList.toggle('hidden'); }
