@@ -71,10 +71,14 @@
         body .text-\\[11px\\] { font-size: 0.8125rem !important; line-height: 1.45 !important; }
         body .text-\\[10px\\] { font-size: 0.75rem !important; line-height: 1.4 !important; }
 
-        /* 매물 목록: 담당자와 주소를 독립 열로 표시하고 충분한 폭 확보 */
-        #propertyListTable { min-width: 1480px; }
+        /* 매물 목록: 화면 전체 너비 활용, 주소·매물명 열 공간 확보 */
+        #propertyListContainer, #tableViewWrapper { width: 100%; max-width: none; }
+        #propertyListTable { width: 100%; min-width: 1600px; table-layout: auto; }
         #propertyListTable thead th { font-size: 0.9rem !important; color: #334155 !important; white-space: nowrap; }
         #propertyListTable tbody td { font-size: 0.95rem; }
+        #propertyListTable tbody td:nth-child(3) { min-width: 190px; }
+        #propertyListTable tbody td:nth-child(4) { min-width: 300px; }
+        #propertyListTable tbody td:nth-child(5) { min-width: 135px; }
         #propertyListTable tbody tr { border-bottom: 1px solid #e2e8f0; }
         #propertyListTable tbody tr:hover { background-color: #eff6ff; }
 </style>
@@ -288,7 +292,7 @@
     </header>
 
     <!-- 메인 컨텐츠 영역 -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main class="flex-1 w-full max-w-none mx-auto px-3 sm:px-4 lg:px-5 py-6 space-y-6">
 
         <!-- ========================================================= -->
         <!-- [워크스페이스 1] 상가·사무실 임대 매물 관리 영역 -->
