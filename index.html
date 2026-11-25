@@ -954,7 +954,7 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                 <div class="flex flex-col lg:flex-row gap-3">
                     <div class="relative flex-1">
                         <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-                        <input type="text" id="searchInput" oninput="applyFiltersDebounced()" placeholder="매물명·주소·담당자 검색" class="w-full pl-10 pr-9 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="매물명·주소·담당자 검색" class="w-full pl-10 pr-9 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
                         <button type="button" id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                             <i data-lucide="x-circle" class="w-4 h-4"></i>
                         </button>
@@ -1436,7 +1436,7 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 mb-1">매물번호 *</label>
-                            <input type="text" id="formPropertyCode" required placeholder="예: P-101 (미입력 시 자동생성)" class="w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <input type="text" id="formPropertyCode" required placeholder="예: SL-00001 / OL-00001 / BL-300001 (유형별 자동생성)" class="w-full px-3.5 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 mb-1">광고 현황 / 광고 채널</label>
@@ -1453,7 +1453,7 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 mb-1">매물 유형 *</label>
-                            <select id="formType" required class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <select id="formType" required onchange="updateNewPropertyCode()" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
                                 <option value="상가">상가</option>
                                 <option value="원룸">원룸</option>
                                 <option value="주택">주택</option>
@@ -3739,6 +3739,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 if (target) renderDetailDrawerContent(target);
                 else closeDetailDrawer();
             }
+            lucide.createIcons();
         }
 
         function renderTableView(list) {
@@ -3780,6 +3781,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                     <td class="excel-td" title="${escapeHTML(p.description || '')}">${escapeHTML(p.description || '-')}</td>
                 </tr>`;
             }).join('');
+            if (window.lucide) lucide.createIcons();
         }
 
         function renderCardView(list) {
@@ -3827,6 +3829,37 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             applyFilters();
         }
 
+        // 기존 번호 체계(SL/OL/BL)를 유지하며, 기존 데이터에서 유형별 마지막 번호 다음을 자동 부여합니다.
+        function getNextPropertyCode(type) {
+            const prefixMap = { '상가': 'SL', '원룸': 'OL', '주택': 'BL' };
+            const prefix = prefixMap[type] || 'SL';
+            const pattern = new RegExp('^' + prefix + '-(\\d+)$', 'i');
+            let maxNumber = 0;
+            properties.forEach(property => {
+                const match = String(property.id || '').trim().match(pattern);
+                if (match) maxNumber = Math.max(maxNumber, Number(match[1]) || 0);
+            });
+            // 주택(BL)은 300001부터 시작하며 6자리, 상가(SL)/원룸(OL)은 5자리로 유지합니다.
+            const startNumber = prefix === 'BL' ? 300001 : 1;
+            let nextNumber = Math.max(maxNumber + 1, startNumber);
+            const digitCount = prefix === 'BL' ? 6 : 5;
+            let candidate = `${prefix}-${String(nextNumber).padStart(digitCount, '0')}`;
+            // 매물번호는 CRM 전체에서 고유해야 하므로 혹시 모를 수동 번호와의 충돌도 피합니다.
+            while (properties.some(property => String(property.id || '').trim().toUpperCase() === candidate)) {
+                nextNumber++;
+                candidate = `${prefix}-${String(nextNumber).padStart(digitCount, '0')}`;
+            }
+            return candidate;
+        }
+
+        function updateNewPropertyCode() {
+            const editId = document.getElementById('formPropertyId')?.value;
+            if (editId) return;
+            const type = document.getElementById('formType')?.value || '상가';
+            const codeInput = document.getElementById('formPropertyCode');
+            if (codeInput) codeInput.value = getNextPropertyCode(type);
+        }
+
         function updatePropertyTypeTabs() {
             const counts = { ALL: properties.length, '상가': 0, '원룸': 0, '주택': 0 };
             properties.forEach(p => { if (counts[p.type] !== undefined) counts[p.type]++; });
@@ -3836,21 +3869,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.querySelectorAll('.property-type-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.typeTab === current));
         }
 
-        let searchFilterTimer = null;
-        function applyFiltersDebounced() {
-            if (searchFilterTimer) clearTimeout(searchFilterTimer);
-            searchFilterTimer = setTimeout(() => {
-                searchFilterTimer = null;
-                renderAll();
-            }, 220);
-        }
-        function applyFilters() {
-            if (searchFilterTimer) {
-                clearTimeout(searchFilterTimer);
-                searchFilterTimer = null;
-            }
-            renderAll();
-        }
+        function applyFilters() { renderAll(); }
         function clearSearch() { document.getElementById('searchInput').value = ''; applyFilters(); }
         function quickFilterStatus(status) { document.getElementById('filterStatus').value = status; applyFilters(); }
         function setMaxRentFilter(maxVal) {
@@ -4041,7 +4060,9 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             } else {
                 document.getElementById('modalTitle').textContent = '새 매물 등록';
                 document.getElementById('formPropertyId').value = '';
-                document.getElementById('formPropertyCode').value = `P-${101 + properties.length + Math.floor(Math.random() * 90)}`;
+                const selectedTabType = document.getElementById('filterType')?.value || 'ALL';
+                document.getElementById('formType').value = ['상가', '원룸', '주택'].includes(selectedTabType) ? selectedTabType : '상가';
+                document.getElementById('formPropertyCode').value = getNextPropertyCode(document.getElementById('formType').value);
                 document.getElementById('formAdStatus').value = '광고대기중';
                 document.getElementById('formMoveIn').value = '즉시입주';
                 ['formParking','formPetFriendly','formWater','formGas','formToiletGender','formToiletLocation'].forEach(id => document.getElementById(id).value = '확인필요');
@@ -4067,7 +4088,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             e.preventDefault();
             const editId = document.getElementById('formPropertyId').value;
             const customCode = (document.getElementById('formPropertyCode').value || '').trim();
-            const finalId = customCode || editId || `P-${101 + properties.length + Math.floor(Math.random() * 90)}`;
+            const finalId = customCode || editId || getNextPropertyCode(document.getElementById('formType').value);
 
             const duplicateExists = properties.some(p => p.id === finalId && p.id !== editId);
             if (duplicateExists) {
