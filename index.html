@@ -1320,13 +1320,13 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
                     <input type="text" id="contractSearchInput" oninput="renderContractsList()" placeholder="임대인, 임차인, 물건지, 계약일 검색..." class="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
                 </div>
-                <button type="button" onclick="openContractModal()" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-500 shadow-sm transition shrink-0">
+                <button type="button" id="contractRegisterButton" onclick="openContractModal()" class="hl-contract-register inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-500 shadow-sm transition shrink-0">
                     <i data-lucide="file-plus-2" class="w-4 h-4"></i><span>계약 등록</span>
                 </button>
             </section>
 
-            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
+            <section id="contractTableSection" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div id="contractTableScrollWrapper" class="overflow-x-auto">
                     <table class="w-full text-left border-collapse text-xs sm:text-sm">
                         <thead><tr class="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-500 whitespace-nowrap">
                             <th class="py-3.5 px-3.5">계약일시</th><th class="py-3.5 px-3.5">가계약일시</th><th class="py-3.5 px-3.5">중도금일시</th><th class="py-3.5 px-3.5">잔금일시</th><th class="py-3.5 px-3.5">임대인</th><th class="py-3.5 px-3.5">임차인</th><th class="py-3.5 px-3.5">담당자</th><th class="py-3.5 px-3.5">가계약금</th><th class="py-3.5 px-3.5">계약금</th><th class="py-3.5 px-3.5">잔금</th><th class="py-3.5 px-3.5">물건지</th><th class="py-3.5 px-3.5">중개수수료</th><th class="py-3.5 px-3.5">메모</th><th class="py-3.5 px-3.5 text-right">관리</th>
@@ -2412,6 +2412,8 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         }
 
         function updateAdminUI() {
+            const contractRegisterButton = document.getElementById('contractRegisterButton');
+            if (contractRegisterButton) contractRegisterButton.classList.toggle('hidden', !isAdminMode);
             const badge = document.getElementById('roleBadge');
             const badgeText = document.getElementById('roleBadgeText');
             const toggleBtn = document.getElementById('adminToggleBtn');
@@ -2441,6 +2443,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 el.classList.toggle('opacity-55', !isAdminMode);
                 el.classList.toggle('bg-slate-50/70', !isAdminMode);
             });
+            if (document.getElementById('contractsWorkspace') && !document.getElementById('contractsWorkspace').classList.contains('hidden')) renderContractsList();
             lucide.createIcons();
         }
 
@@ -2703,6 +2706,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             return text ? escapeHTML(text) : '-';
         }
         function openContractModal(editId = null) {
+            if (!requireAdminGuard()) return;
             const c = editId ? contracts.find(x => x.id === editId) : null;
             document.getElementById('contractFormId').value = c?.id || '';
             document.getElementById('contractModalTitle').textContent = c ? '계약 수정' : '새 계약 등록';
@@ -2728,6 +2732,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         function closeContractModal() { document.getElementById('contractModalBackdrop').classList.add('hidden'); }
         function saveContract(e) {
             e.preventDefault();
+            if (!requireAdminGuard()) return;
             const id = document.getElementById('contractFormId').value;
             const payload = {
                 id: id || 'CT-' + String(Date.now()).slice(-6),
@@ -2750,6 +2755,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             saveContractsToStorage(); closeContractModal(); renderContractsList(); showToast(idx >= 0 ? '계약 정보가 수정되었습니다.' : '새 계약이 등록되었습니다.');
         }
         function deleteContract(id) {
+            if (!requireAdminGuard()) return;
             if (!confirm('이 계약을 삭제하시겠습니까?')) return;
             contracts = contracts.filter(c => c.id !== id); saveContractsToStorage(); renderContractsList(); showToast('계약이 삭제되었습니다.');
         }
@@ -2762,7 +2768,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.getElementById('contractStatLatest').textContent = contracts.length ? (contracts.slice().sort((a,b)=>String(b.contractDate||'').localeCompare(String(a.contractDate||'')))[0].contractDate || '-') : '-';
             const body = document.getElementById('contractTableBody'); const empty = document.getElementById('contractEmptyState');
             empty.classList.toggle('hidden', list.length > 0);
-            body.innerHTML = list.map(c => `<tr><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.contractDate))}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.preContractDate))}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.interim))}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.finalDate))}</td><td class="py-3 px-3.5">${escapeHTML(c.lessor||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.lessee||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.manager||'-')}</td><td class="py-3 px-3.5">${formatContractAmount(c.preContractDeposit)}</td><td class="py-3 px-3.5">${formatContractAmount(c.deposit)}</td><td class="py-3 px-3.5">${formatContractAmount(c.balance)}</td><td class="py-3 px-3.5 min-w-[220px]">${escapeHTML(c.propertyAddress||'-')}</td><td class="py-3 px-3.5 font-semibold text-amber-700">${formatContractAmount(c.fee)}</td><td class="py-3 px-3.5 min-w-[180px] whitespace-pre-wrap">${escapeHTML(c.memo||'-')}</td><td class="py-3 px-3.5 text-right whitespace-nowrap"><button onclick="openContractModal('${c.id}')" class="p-1.5 text-slate-500 hover:text-brand-600"><i data-lucide="pencil" class="w-4 h-4"></i></button><button onclick="deleteContract('${c.id}')" class="p-1.5 text-slate-500 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('');
+            body.innerHTML = list.map(c => `<tr><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.contractDate))}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.preContractDate))}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.interim))}</td><td class="py-3 px-3.5 whitespace-nowrap">${escapeHTML(formatContractDateTime(c.finalDate))}</td><td class="py-3 px-3.5">${escapeHTML(c.lessor||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.lessee||'-')}</td><td class="py-3 px-3.5">${escapeHTML(c.manager||'-')}</td><td class="py-3 px-3.5">${formatContractAmount(c.preContractDeposit)}</td><td class="py-3 px-3.5">${formatContractAmount(c.deposit)}</td><td class="py-3 px-3.5">${formatContractAmount(c.balance)}</td><td class="py-3 px-3.5 min-w-[220px]">${escapeHTML(c.propertyAddress||'-')}</td><td class="py-3 px-3.5 font-semibold text-amber-700">${formatContractAmount(c.fee)}</td><td class="py-3 px-3.5 min-w-[180px] whitespace-pre-wrap">${escapeHTML(c.memo||'-')}</td><td class="py-3 px-3.5 text-right whitespace-nowrap">${isAdminMode ? `<button onclick="openContractModal('${c.id}')" class="p-1.5 text-slate-500 hover:text-brand-600"><i data-lucide="pencil" class="w-4 h-4"></i></button><button onclick="deleteContract('${c.id}')" class="p-1.5 text-slate-500 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '<span class="text-xs text-slate-400">조회 전용</span>'}</td></tr>`).join('');
             lucide.createIcons();
         }
 
@@ -4849,6 +4855,78 @@ function toggleDataMenu() {
   border-radius: 10px !important;
 }
 #customersWorkspace section:has(#customerTableBody) > .overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #64748b !important;
+  border: 3px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+}
+</style>
+
+<style id="hl-25th-contract-search-and-horizontal-scroll">
+/* 25차: 계약 검색창을 약 1/4 폭으로 줄이고 계약등록 버튼을 항상 보이게 배치 */
+@media (min-width: 768px) {
+  #contractsWorkspace section:has(#contractSearchInput) {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+  }
+  #contractsWorkspace section:has(#contractSearchInput) > div:has(#contractSearchInput) {
+    flex: 0 0 25% !important;
+    width: 25% !important;
+    max-width: 25% !important;
+    min-width: 180px !important;
+  }
+}
+#contractsWorkspace #contractRegisterButton {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  flex: 0 0 auto !important;
+  z-index: 2 !important;
+  white-space: nowrap !important;
+  background: #d97706 !important;
+  color: #ffffff !important;
+}
+@media (max-width: 767px) {
+  #contractsWorkspace section:has(#contractSearchInput) > div:has(#contractSearchInput) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+/* 계약 목록은 표 전체 폭을 유지하고 바깥쪽에서 좌우 스크롤 */
+#contractsWorkspace #contractTableSection {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+#contractsWorkspace #contractTableScrollWrapper {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: scroll !important;
+  overflow-y: hidden !important;
+  scrollbar-width: auto !important;
+  scrollbar-color: #64748b #e2e8f0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+#contractsWorkspace #contractTableScrollWrapper table {
+  width: max-content !important;
+  min-width: 1850px !important;
+  table-layout: auto !important;
+}
+#contractsWorkspace #contractTableScrollWrapper th,
+#contractsWorkspace #contractTableScrollWrapper td {
+  white-space: nowrap !important;
+}
+#contractsWorkspace #contractTableScrollWrapper::-webkit-scrollbar {
+  height: 14px !important;
+}
+#contractsWorkspace #contractTableScrollWrapper::-webkit-scrollbar-track {
+  background: #e2e8f0 !important;
+  border-radius: 10px !important;
+}
+#contractsWorkspace #contractTableScrollWrapper::-webkit-scrollbar-thumb {
   background: #64748b !important;
   border: 3px solid #e2e8f0 !important;
   border-radius: 10px !important;
