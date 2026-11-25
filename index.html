@@ -635,13 +635,13 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
             <div class="hl-side-sub">매물관리 시스템</div>
         </div>
         <nav class="hl-side-nav">
-            <button type="button" class="hl-side-item active" onclick="switchMainWorkspaceTab('properties')"><i data-lucide="home"></i><span>매물관리</span></button>
-            <button type="button" class="hl-side-item" onclick="setPropertyTypeTab('ALL')"><i data-lucide="grid-2x2"></i><span>전체</span></button>
-            <button type="button" class="hl-side-item" onclick="setPropertyTypeTab('상가')"><i data-lucide="store"></i><span>상가</span></button>
-            <button type="button" class="hl-side-item" onclick="setPropertyTypeTab('원룸')"><i data-lucide="building-2"></i><span>원룸</span></button>
-            <button type="button" class="hl-side-item" onclick="setPropertyTypeTab('주택')"><i data-lucide="house"></i><span>주택</span></button>
-            <button type="button" class="hl-side-item" onclick="switchMainWorkspaceTab('customers')"><i data-lucide="contact-round"></i><span>고객관리</span></button>
-            <button type="button" class="hl-side-item" onclick="switchMainWorkspaceTab('contracts')"><i data-lucide="file-signature"></i><span>계약관리</span></button>
+            <button type="button" class="hl-side-item active" data-side-workspace="properties" onclick="switchMainWorkspaceTab('properties')"><i data-lucide="home"></i><span>매물관리</span></button>
+            <button type="button" class="hl-side-item" data-side-type="ALL" onclick="setPropertyTypeTab('ALL')"><i data-lucide="grid-2x2"></i><span>전체</span></button>
+            <button type="button" class="hl-side-item" data-side-type="상가" onclick="setPropertyTypeTab('상가')"><i data-lucide="store"></i><span>상가</span></button>
+            <button type="button" class="hl-side-item" data-side-type="원룸" onclick="setPropertyTypeTab('원룸')"><i data-lucide="building-2"></i><span>원룸</span></button>
+            <button type="button" class="hl-side-item" data-side-type="주택" onclick="setPropertyTypeTab('주택')"><i data-lucide="house"></i><span>주택</span></button>
+            <button type="button" class="hl-side-item" data-side-workspace="customers" onclick="switchMainWorkspaceTab('customers')"><i data-lucide="contact-round"></i><span>고객관리</span></button>
+            <button type="button" class="hl-side-item" data-side-workspace="contracts" onclick="switchMainWorkspaceTab('contracts')"><i data-lucide="file-signature"></i><span>계약관리</span></button>
             <div class="hl-side-divider"></div>
         </nav>
         <div id="hlSideAdminArea">
@@ -2787,6 +2787,12 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
         function switchMainWorkspaceTab(tab) {
             activeMainTab = tab;
+            document.querySelectorAll('#hlSidebar .hl-side-item').forEach(btn => {
+                const isActive = btn.dataset.sideWorkspace === tab;
+                btn.classList.toggle('active', isActive);
+                if (isActive) btn.setAttribute('aria-current', 'page');
+                else btn.removeAttribute('aria-current');
+            });
             const propWs = document.getElementById('propertiesWorkspace');
             const custWs = document.getElementById('customersWorkspace');
             const contractWs = document.getElementById('contractsWorkspace');
@@ -3916,9 +3922,18 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         }
 
         function setPropertyTypeTab(type) {
+            const selectedType = type || 'ALL';
             const select = document.getElementById('filterType');
-            if (select) select.value = type || 'ALL';
-            document.querySelectorAll('.property-type-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.typeTab === (type || 'ALL')));
+            if (select) select.value = selectedType;
+            // 좌측 유형 메뉴를 단독으로 눌러도 매물관리 화면으로 먼저 전환합니다.
+            switchMainWorkspaceTab('properties');
+            document.querySelectorAll('.property-type-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.typeTab === selectedType));
+            document.querySelectorAll('#hlSidebar [data-side-type]').forEach(btn => {
+                const isActive = btn.dataset.sideType === selectedType;
+                btn.classList.toggle('active', isActive);
+                if (isActive) btn.setAttribute('aria-current', 'page');
+                else btn.removeAttribute('aria-current');
+            });
             applyFilters();
         }
 
