@@ -544,6 +544,87 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
 }
 #hlSideAdminArea #storageStatusLabel::first-line{line-height:1.05 !important;}
 </style>
+
+<style id="hl-24th-customer-toolbar-scroll-layout">
+/* 24차: 고객 검색창 폭을 약 1/4로 줄이고 툴바 전체를 왼쪽 정렬 */
+@media (min-width: 768px) {
+  #customersWorkspace section:has(#customerSearchInput) {
+    display:flex !important;
+    flex-direction:row !important;
+    flex-wrap:nowrap !important;
+    justify-content:flex-start !important;
+    align-items:center !important;
+    gap:12px !important;
+  }
+  #customersWorkspace #customerSearchInput {
+    width:100% !important;
+    min-width:0 !important;
+  }
+  #customersWorkspace section:has(#customerSearchInput) > div.relative {
+    flex:0 0 25% !important;
+    width:25% !important;
+    max-width:25% !important;
+    min-width:180px !important;
+  }
+  #customersWorkspace section:has(#customerSearchInput) > div.flex {
+    flex:0 0 auto !important;
+    width:auto !important;
+    margin-left:0 !important;
+    justify-content:flex-start !important;
+    flex-wrap:nowrap !important;
+    gap:10px !important;
+  }
+}
+/* 고객목록 표는 고정 폭으로 유지하고, 바깥 래퍼에서 실제 가로 스크롤 제공 */
+#customerTableScrollWrapper {
+  display:block !important;
+  width:100% !important;
+  max-width:100% !important;
+  overflow-x:scroll !important;
+  overflow-y:hidden !important;
+  scrollbar-width:auto !important;
+  scrollbar-color:#475569 #dbe3ee !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+#customerTableScrollWrapper::-webkit-scrollbar {
+  height:15px !important;
+  display:block !important;
+}
+#customerTableScrollWrapper::-webkit-scrollbar-track {
+  background:#dbe3ee !important;
+  border-radius:4px !important;
+}
+#customerTableScrollWrapper::-webkit-scrollbar-thumb {
+  background:#64748b !important;
+  border:2px solid #dbe3ee !important;
+  border-radius:5px !important;
+}
+#customerTableScrollWrapper table {
+  width:1800px !important;
+  min-width:1800px !important;
+  max-width:none !important;
+  table-layout:fixed !important;
+}
+#customerTableScrollWrapper th,
+#customerTableScrollWrapper td {
+  white-space:nowrap !important;
+  box-sizing:border-box !important;
+}
+@media (max-width:767px) {
+  #customersWorkspace section:has(#customerSearchInput) {
+    align-items:stretch !important;
+  }
+  #customersWorkspace section:has(#customerSearchInput) > div.relative {
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+  #customersWorkspace section:has(#customerSearchInput) > div.flex {
+    justify-content:flex-start !important;
+  }
+}
+</style>
+
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
     <!-- 좌측 고정 업무 메뉴: PC 기준 디자인 -->
@@ -780,6 +861,12 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                         </button>
                     </div>
                 </div>
+
+                <!-- 고객 등록 버튼: 어느 화면에서든 바로 고객을 등록할 수 있도록 상단에 고정 -->
+                <button type="button" onclick="openCustomerModal()" class="hl-top-customer-register inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 shadow-sm transition" title="새 고객 등록">
+                    <i data-lucide="user-plus" class="w-4 h-4"></i>
+                    <span>고객 등록</span>
+                </button>
 
                 <!-- 새 매물 등록 버튼 -->
                 <button type="button" onclick="openPropertyModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-500 shadow-sm transition">
@@ -1171,7 +1258,7 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
             </section>
 
             <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
+                <div id="customerTableScrollWrapper" class="overflow-x-auto">
                     <table class="w-full text-left border-collapse text-xs sm:text-sm">
                         <thead>
                             <tr class="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
@@ -4710,5 +4797,60 @@ function toggleDataMenu() {
 #tableViewWrapper .excel-td .ad-mini {
   margin-left:auto !important;
   margin-right:auto !important;
+}
+</style>
+
+
+<style id="hl-23rd-customer-register-and-horizontal-scroll">
+/* 23차: 상단에 고객 등록 버튼 복원. 기존 15차의 마지막 버튼만 표시 규칙을 마지막 두 버튼 표시로 보정 */
+@media (min-width: 0px) {
+  header > div:first-child > div:nth-child(2) > button:last-child,
+  header > div:first-child > div:nth-child(2) > button:nth-last-child(2) {
+    display: inline-flex !important;
+  }
+  header > div:first-child > div:nth-child(2) > .hl-top-customer-register {
+    background: #059669 !important;
+    color: #fff !important;
+    border-color: #047857 !important;
+  }
+}
+/* 고객 표는 내용 폭을 유지하고 표 바깥에서 좌우로 스크롤 */
+#customersWorkspace section:has(#customerTableBody) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+#customersWorkspace section:has(#customerTableBody) > .overflow-x-auto {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: scroll !important;
+  overflow-y: hidden !important;
+  scrollbar-width: auto !important;
+  scrollbar-color: #64748b #e2e8f0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+#customersWorkspace #customerTableBody {
+  min-width: 0;
+}
+#customersWorkspace section:has(#customerTableBody) table {
+  width: max-content !important;
+  min-width: 1450px !important;
+  table-layout: auto !important;
+}
+#customersWorkspace section:has(#customerTableBody) th,
+#customersWorkspace section:has(#customerTableBody) td {
+  white-space: nowrap !important;
+}
+#customersWorkspace section:has(#customerTableBody) > .overflow-x-auto::-webkit-scrollbar {
+  height: 14px !important;
+}
+#customersWorkspace section:has(#customerTableBody) > .overflow-x-auto::-webkit-scrollbar-track {
+  background: #e2e8f0 !important;
+  border-radius: 10px !important;
+}
+#customersWorkspace section:has(#customerTableBody) > .overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #64748b !important;
+  border: 3px solid #e2e8f0 !important;
+  border-radius: 10px !important;
 }
 </style>
