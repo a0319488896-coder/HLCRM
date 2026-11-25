@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HL CRM | PC 매물목록 중심 화면</title>
+    <!-- 28차: 담당자별 자동 색상 및 고객 담당자 필터 -->
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Pretendard / Inter 스타일 -->
@@ -1249,6 +1250,9 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                         <option value="3순위">3순위</option>
                         <option value="보류">보류</option>
                     </select>
+                    <select id="customerManagerFilter" onchange="renderCustomersList()" class="px-3 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <option value="ALL">담당자: 전체</option>
+                    </select>
                     <span class="text-xs text-slate-500">고객 <strong id="customerFilteredCount" class="text-slate-900">0</strong>명</span>
                     <button type="button" onclick="openCustomerModal()" class="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 shadow-sm transition shrink-0">
                         <i data-lucide="user-plus" class="w-4 h-4"></i>
@@ -1391,7 +1395,8 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-700 mb-1">담당자 *</label>
-                        <input type="text" id="custManager" required placeholder="예: 김현우 소장 또는 고객명" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <input type="text" id="custManager" list="customerManagerDatalist" required placeholder="예: 조영현" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <datalist id="customerManagerDatalist"><option value="조영현"></option><option value="김리원"></option><option value="강지원"></option></datalist>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-700 mb-1">연락처 *</label>
@@ -1669,7 +1674,8 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-slate-700 mb-1">담당 공인중개사 / 실장</label>
-                            <input type="text" id="formAgent" placeholder="예: 김민수 팀장" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <input type="text" id="formAgent" list="propertyAgentDatalist" placeholder="예: 조영현" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <datalist id="propertyAgentDatalist"><option value="조영현"></option><option value="김리원"></option><option value="강지원"></option></datalist>
                         </div>
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-semibold text-slate-700 mb-1">임대인 연락처 (내부용)</label>
@@ -2807,6 +2813,25 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             lucide.createIcons();
         }
 
+        function getManagerColorClass(name) {
+            const v = String(name || '').trim();
+            if (v.includes('조영현')) return 'hl-manager-yellow';
+            if (v.includes('김리원')) return 'hl-manager-orange';
+            if (v.includes('강지원')) return 'hl-manager-green';
+            return '';
+        }
+
+        function updateCustomerManagerFilter() {
+            const select = document.getElementById('customerManagerFilter');
+            if (!select) return;
+            const current = select.value || 'ALL';
+            const names = new Set(['조영현', '김리원', '강지원']);
+            customers.forEach(c => { const name = String(c.manager || '').trim(); if (name) names.add(name); });
+            const sorted = Array.from(names).sort((a,b) => a.localeCompare(b, 'ko'));
+            select.innerHTML = '<option value="ALL">담당자: 전체</option>' + sorted.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join('');
+            select.value = Array.from(select.options).some(o => o.value === current) ? current : 'ALL';
+        }
+
         function renderCustomersList() {
             document.getElementById('navPropCountBadge').textContent = properties.length;
             document.getElementById('navCustomerCountBadge').textContent = customers.length;
@@ -2816,10 +2841,14 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.getElementById('custStatUrgent').textContent = customers.filter(c => /즉시|빠른|급|1개월|당월|12월/i.test(c.moveInDate || '')).length;
 
             const q = (document.getElementById('customerSearchInput')?.value || '').trim().toLowerCase();
+            updateCustomerManagerFilter();
             const priorityFilter = document.getElementById('customerPriorityFilter')?.value || 'ALL';
+            const managerFilter = document.getElementById('customerManagerFilter')?.value || 'ALL';
             const list = customers.filter(c => {
                 const prio = c.priority || '2순위';
+                const manager = String(c.manager || '').trim();
                 if (priorityFilter !== 'ALL' && prio !== priorityFilter) return false;
+                if (managerFilter !== 'ALL' && manager !== managerFilter) return false;
                 if (!q) return true;
                 return [
                     prio, c.manager, c.phone, c.firstProperty, c.inquiryDate, c.deposit, c.rent,
@@ -2848,7 +2877,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 return `
                 <tr class="hover:bg-emerald-50/30 transition">
                     <td class="py-3 px-3.5 whitespace-nowrap"><span class="px-2 py-0.5 text-xs font-bold rounded-md ${getPriorityBadge(prio)}">${escapeHTML(prio)}</span></td>
-                    <td class="py-3 px-3.5 font-bold text-slate-900 whitespace-nowrap">${escapeHTML(c.manager || '-')}</td>
+                    <td class="py-3 px-3.5 font-bold text-slate-900 whitespace-nowrap ${getManagerColorClass(c.manager)}">${escapeHTML(c.manager || '-')}</td>
                     <td class="py-3 px-3.5 text-slate-700 font-mono text-xs whitespace-nowrap">${escapeHTML(c.phone || '-')}</td>
                     <td class="py-3 px-3.5 text-slate-800 max-w-[180px] truncate" title="${escapeHTML(c.firstProperty || '')}">${escapeHTML(c.firstProperty || '-')}</td>
                     <td class="py-3 px-3.5 text-slate-600 whitespace-nowrap">${escapeHTML(c.inquiryDate || '-')}</td>
@@ -3857,10 +3886,10 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                             <option value="보류" ${p.status === '보류' ? 'selected' : ''}>보류</option>
                         </select>
                     </td>
-                    <td class="excel-td font-medium">${escapeHTML(p.agent || '-')}</td>
+                    <td class="excel-td font-medium ${getManagerColorClass(p.agent)}">${escapeHTML(p.agent || '-')}</td>
                     <td class="excel-td font-mono font-bold">${escapeHTML(p.id || '-')}</td>
-                    <td class="excel-td"><span class="ad-mini ${getAdBadgeStyle(adText)}">${escapeHTML(adText)}</span></td>
-                    <td class="excel-td">${escapeHTML(photoText)}</td>
+                    <td class="excel-td ${adText.includes('광고대기중') ? 'hl-attention-yellow' : ''}"><span class="ad-mini ${getAdBadgeStyle(adText)}">${escapeHTML(adText)}</span></td>
+                    <td class="excel-td ${String(photoText).trim() === '없음' ? 'hl-attention-yellow' : ''}">${escapeHTML(photoText)}</td>
                     <td class="excel-td text-slate-600" title="${escapeHTML(p.address || '')}">${escapeHTML(p.address || '-')}</td>
                     <td class="excel-td whitespace-nowrap">${escapeHTML(p.floorText || '-')}</td>
                     <td class="excel-td whitespace-nowrap">${formatMoney(p.deposit)}</td>
