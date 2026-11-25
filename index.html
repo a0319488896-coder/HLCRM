@@ -626,6 +626,15 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
 }
 </style>
 
+
+<style id="hl-manager-status-colors">
+/* 29차: 담당자/상태 자동 색상 표시 */
+.hl-manager-yellow{background:#fff3a6 !important;color:#5b4a00 !important;}
+.hl-manager-orange{background:#ffd8a8 !important;color:#7a3600 !important;}
+.hl-manager-green{background:#d9f7be !important;color:#245b13 !important;}
+.hl-attention-yellow{background:#fff3a6 !important;color:#5b4a00 !important;font-weight:700 !important;}
+#customerManagerFilter{min-width:120px;}
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
     <!-- 좌측 고정 업무 메뉴: PC 기준 디자인 -->
@@ -1054,6 +1063,13 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                             <option value="상가">상가</option>
                             <option value="원룸">원룸</option>
                             <option value="주택">주택</option>
+                        </select>
+
+                        <select id="propertyManagerFilter" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="ALL">담당자: 전체</option>
+                            <option value="조영현">조영현</option>
+                            <option value="김리원">김리원</option>
+                            <option value="강지원">강지원</option>
                         </select>
 
                         <select id="filterStatus" onchange="applyFilters()" class="px-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
@@ -3784,9 +3800,25 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.getElementById('statCompleted').textContent = properties.filter(p => p.status === '계약완료').length;
         }
 
+        function updatePropertyManagerFilter() {
+            const select = document.getElementById('propertyManagerFilter');
+            if (!select) return;
+            const current = select.value || 'ALL';
+            const names = new Set(['조영현', '김리원', '강지원']);
+            properties.forEach(p => {
+                const name = String(p.agent || '').trim();
+                if (name) names.add(name);
+            });
+            const sorted = Array.from(names).sort((a,b) => a.localeCompare(b, 'ko'));
+            select.innerHTML = '<option value="ALL">담당자: 전체</option>' + sorted.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join('');
+            select.value = Array.from(select.options).some(o => o.value === current) ? current : 'ALL';
+        }
+
         function getFilteredProperties() {
+            updatePropertyManagerFilter();
             const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
             const typeFilter = document.getElementById('filterType').value;
+            const propertyManagerFilter = document.getElementById('propertyManagerFilter')?.value || 'ALL';
             const statusFilter = document.getElementById('filterStatus').value;
             const floorFilter = document.getElementById('filterFloor').value;
             const depositMin = Number(document.getElementById('filterDepositMin')?.value || 0);
@@ -3804,6 +3836,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
             const list = properties.filter(p => {
                 if (typeFilter !== 'ALL' && p.type !== typeFilter) return false;
+                if (propertyManagerFilter !== 'ALL' && !String(p.agent || '').includes(propertyManagerFilter)) return false;
                 if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
                 if (floorFilter !== 'ALL' && p.floorCategory !== floorFilter) return false;
                 const deposit = Number(p.deposit || 0);
@@ -4020,6 +4053,8 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         function resetAllFilters() {
             document.getElementById('searchInput').value = '';
             document.getElementById('filterType').value = 'ALL';
+            const propertyManagerFilter = document.getElementById('propertyManagerFilter');
+            if (propertyManagerFilter) propertyManagerFilter.value = 'ALL';
             document.getElementById('filterStatus').value = 'ALL';
             document.getElementById('filterFloor').value = 'ALL';
             document.getElementById('filterDepositMin').value = '';
