@@ -954,7 +954,7 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                 <div class="flex flex-col lg:flex-row gap-3">
                     <div class="relative flex-1">
                         <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-                        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="매물명·주소·담당자 검색" class="w-full pl-10 pr-9 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                        <input type="text" id="searchInput" oninput="applyFiltersDebounced()" placeholder="매물명·주소·담당자 검색" class="w-full pl-10 pr-9 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
                         <button type="button" id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                             <i data-lucide="x-circle" class="w-4 h-4"></i>
                         </button>
@@ -3739,7 +3739,6 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 if (target) renderDetailDrawerContent(target);
                 else closeDetailDrawer();
             }
-            lucide.createIcons();
         }
 
         function renderTableView(list) {
@@ -3781,7 +3780,6 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                     <td class="excel-td" title="${escapeHTML(p.description || '')}">${escapeHTML(p.description || '-')}</td>
                 </tr>`;
             }).join('');
-            if (window.lucide) lucide.createIcons();
         }
 
         function renderCardView(list) {
@@ -3838,7 +3836,21 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             document.querySelectorAll('.property-type-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.typeTab === current));
         }
 
-        function applyFilters() { renderAll(); }
+        let searchFilterTimer = null;
+        function applyFiltersDebounced() {
+            if (searchFilterTimer) clearTimeout(searchFilterTimer);
+            searchFilterTimer = setTimeout(() => {
+                searchFilterTimer = null;
+                renderAll();
+            }, 220);
+        }
+        function applyFilters() {
+            if (searchFilterTimer) {
+                clearTimeout(searchFilterTimer);
+                searchFilterTimer = null;
+            }
+            renderAll();
+        }
         function clearSearch() { document.getElementById('searchInput').value = ''; applyFilters(); }
         function quickFilterStatus(status) { document.getElementById('filterStatus').value = status; applyFilters(); }
         function setMaxRentFilter(maxVal) {
