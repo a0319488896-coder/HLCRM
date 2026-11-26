@@ -2287,7 +2287,16 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         let pcFolderSyncTimer = null;
         const PC_DATA_FILE_NAME = 'hl_crm_data.json';
 
-        const EMBEDDED_SHARED_CONFIG = null;
+        // 모든 PC가 동일한 Google Apps Script 저장소를 사용하도록 공통 주소를 고정합니다.
+        const SHARED_GDRIVE_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbysAFI8JgXozefYXi9UXCW7-7O5sQ9mj7x1JMqmV3Mty7IVLUhLjm0XBc1yrul-Qt-x/exec';
+        const EMBEDDED_SHARED_CONFIG = {
+            mode: 'gdrive',
+            gdriveWebAppUrl: SHARED_GDRIVE_WEB_APP_URL,
+            gdriveToken: '',
+            supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
+            baseUrl: '', token: '',
+            listingsEndpoint: '/api/listings', uploadEndpoint: '/api/upload'
+        };
         let sharedAdminPassword = null;
         let cloudSyncReady = false;
         let cloudSyncBusy = false;
@@ -2668,8 +2677,11 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             try {
                 const rawCfg = localStorage.getItem(SERVER_CFG_KEY);
                 if (rawCfg) serverConfig = { ...serverConfig, ...JSON.parse(rawCfg) };
-                else if (EMBEDDED_SHARED_CONFIG) serverConfig = { ...serverConfig, ...EMBEDDED_SHARED_CONFIG };
             } catch (e) {}
+            // PC별 localStorage에 예전 주소나 다른 저장소 설정이 있어도 공통 주소가 우선합니다.
+            serverConfig = { ...serverConfig, ...EMBEDDED_SHARED_CONFIG,
+                mode: 'gdrive', gdriveWebAppUrl: SHARED_GDRIVE_WEB_APP_URL };
+            try { localStorage.setItem(SERVER_CFG_KEY, JSON.stringify(serverConfig)); } catch (e) {}
         }
 
         function loadProperties() {
@@ -3066,7 +3078,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
         function openServerModal() {
             document.querySelectorAll('input[name="storageModeRadio"]').forEach(r => { r.checked = (r.value === serverConfig.mode); });
-            document.getElementById('cfgGdriveWebAppUrl').value = serverConfig.gdriveWebAppUrl || '';
+            document.getElementById('cfgGdriveWebAppUrl').value = SHARED_GDRIVE_WEB_APP_URL;
             document.getElementById('cfgGdriveToken').value = serverConfig.gdriveToken || '';
             document.getElementById('cfgSupabaseUrl').value = serverConfig.supabaseUrl || '';
             document.getElementById('cfgSupabaseAnonKey').value = serverConfig.supabaseAnonKey || '';
@@ -3118,7 +3130,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             if (!requireAdminGuard()) return;
             serverConfig = {
                 mode: 'gdrive',
-                gdriveWebAppUrl: document.getElementById('cfgGdriveWebAppUrl').value.trim(),
+                gdriveWebAppUrl: SHARED_GDRIVE_WEB_APP_URL,
                 gdriveToken: document.getElementById('cfgGdriveToken').value.trim(),
                 supabaseUrl: document.getElementById('cfgSupabaseUrl').value.trim().replace(/\/+$/, ''),
                 supabaseAnonKey: document.getElementById('cfgSupabaseAnonKey').value.trim(),
@@ -3406,8 +3418,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         }
 
         function getActiveGdriveUrl() {
-            const inputUrl = document.getElementById('cfgGdriveWebAppUrl')?.value?.trim();
-            return inputUrl || serverConfig.gdriveWebAppUrl || '';
+            return SHARED_GDRIVE_WEB_APP_URL;
         }
 
         function applyGoogleDrivePayload(data, silent = false) {
