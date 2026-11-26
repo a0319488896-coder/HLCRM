@@ -1654,6 +1654,7 @@ header > div:nth-child(2) > div{padding-top:3px !important;padding-bottom:3px !i
                                 <option value="있음">있음</option>
                                 <option value="없음">없음</option>
                                 <option value="화물용 포함">화물용 포함</option>
+                                <option value="확인필요">확인필요</option>
                             </select>
                         </div>
                         <div>
@@ -4212,11 +4213,13 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 document.getElementById('formPremium').value = p.premium ?? 0;
                 document.getElementById('formMoveIn').value = p.moveIn || '';
                 const parkingSelect = document.getElementById('formParking');
-                if (p.parking && !Array.from(parkingSelect.options).some(o => o.value === p.parking)) parkingSelect.add(new Option(p.parking, p.parking));
-                parkingSelect.value = p.parking || '확인필요';
+                const allowedParking = ['가능', '불가능', '확인필요'];
+                parkingSelect.value = allowedParking.includes(p.parking) ? p.parking : '확인필요';
                 document.getElementById('formRooms').value = p.rooms || '';
                 document.getElementById('formToiletCount').value = p.toiletCount ?? (String(p.bathrooms || '').match(/\d+/)?.[0] || '');
-                document.getElementById('formElevator').value = p.elevator || '있음';
+                const elevatorSelect = document.getElementById('formElevator');
+                const allowedElevators = ['있음', '없음', '화물용 포함', '확인필요'];
+                elevatorSelect.value = allowedElevators.includes(p.elevator) ? p.elevator : '확인필요';
                 document.getElementById('formPetFriendly').value = p.petFriendly || '확인필요';
                 document.getElementById('formPhotoStatus').value = p.photoStatus || ((p.photos || []).length ? '있음' : '없음');
                 document.getElementById('formWater').value = p.water || '확인필요';
