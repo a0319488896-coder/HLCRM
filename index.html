@@ -3448,6 +3448,8 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             if (syncedAny) {
                 renderAll();
                 renderCustomersList();
+                // 계약 데이터도 동기화 직후 목록/통계를 갱신합니다.
+                renderContractsList();
                 if (!silent) showToast('구글 시트와 동기화되었습니다.');
             }
             return syncedAny;
@@ -3480,7 +3482,10 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 if (!data.ok) throw new Error(data.message || '연결 실패');
                 applyGoogleDrivePayload(data, true);
                 box.className = 'text-xs p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800';
-                box.textContent = `✓ 구글 시트 연결 및 동기화 성공 (매물 ${(data.listings || []).length}건 · 고객 ${(data.customers || []).length}건 · 직원 ${(data.staffAccounts || []).length}명)`;
+                const contractCount = Array.isArray(data.contracts) ? data.contracts.length : null;
+                box.textContent = contractCount === null
+                    ? `✓ 구글 시트 연결됨 (매물 ${(data.listings || []).length}건 · 고객 ${(data.customers || []).length}건 · 계약 데이터 응답 없음 · 직원 ${(data.staffAccounts || []).length}명)\n※ Apps Script 배포 버전 또는 doGet 응답을 확인해 주세요.`
+                    : `✓ 구글 시트 연결 및 동기화 성공 (매물 ${(data.listings || []).length}건 · 고객 ${(data.customers || []).length}건 · 계약 ${contractCount}건 · 직원 ${(data.staffAccounts || []).length}명)`;
             } catch (err) {
                 box.className = 'text-xs p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800';
                 box.textContent = `✕ 연결 실패: ${err.message}`;
