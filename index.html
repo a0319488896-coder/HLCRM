@@ -3871,6 +3871,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         }
 
         function renderAll() {
+            properties = normalizeAllPropertyValues(properties);
             updatePropertyTypeTabs();
             updateDashboardStats();
             document.getElementById('navPropCountBadge').textContent = properties.length;
@@ -4460,6 +4461,25 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             return raw;
         }
 
+        // 기존 CRM에 이미 저장된 값도 화면/저장 시 동일한 표기로 통일합니다.
+        function normalizeExistingPropertyValues(p) {
+            if (!p || typeof p !== 'object') return p;
+            const out = { ...p };
+            out.parking = excelParking(out.parking);
+            // 실제 사진이 있으면 사진상태는 항상 '있음'으로 표시합니다.
+            if (Array.isArray(out.photos) && out.photos.length > 0) {
+                out.photoStatus = '있음';
+            } else {
+                const normalizedPhoto = excelPhotoStatus(out.photoStatus);
+                out.photoStatus = normalizedPhoto || '없음';
+            }
+            return out;
+        }
+
+        function normalizeAllPropertyValues(list) {
+            return Array.isArray(list) ? list.map(normalizeExistingPropertyValues) : list;
+        }
+
         function convertExcelRow(row, type, sheetName, rowNumber) {
             const id = excelText(row['매물번호']);
             if (!id) return { error: `${sheetName} ${rowNumber}행: 매물번호가 없습니다.` };
@@ -4604,15 +4624,13 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                     if (old) {
                         // 기존 실제 사진 파일은 절대 덮어쓰거나 삭제하지 않습니다.
                         // 엑셀의 사진 열은 '사진상태'만 갱신합니다.
-                        const merged = { ...old, ...p, photos: old.photos || [] };
-                        if (p.photoStatus === null || p.photoStatus === undefined || p.photoStatus === '') {
-                            merged.photoStatus = old.photoStatus || ((old.photos || []).length ? '있음' : '없음');
-                        }
+                        const merged = normalizeExistingPropertyValues({ ...old, ...p, photos: old.photos || [] });
+                        // 실제 사진이 있으면 엑셀의 '없음' 표기보다 실제 사진 상태를 우선합니다.
+                        if ((old.photos || []).length) merged.photoStatus = '있음';
                         existingById.set(String(p.id), merged);
                         updated++;
                     } else {
-                        const created = { ...p, createdAt: new Date().toISOString(), memos: [] };
-                        if (!created.photoStatus) created.photoStatus = '없음';
+                        const created = normalizeExistingPropertyValues({ ...p, createdAt: new Date().toISOString(), memos: [] });
                         existingById.set(String(p.id), created);
                         added++;
                     }
@@ -4631,7 +4649,8 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
 
                 if (!confirm(message)) return;
 
-                properties = Array.from(existingById.values());
+                properties = normalizeAllPropertyValues(Array.from(existingById.values()));
+                // 업로드된 자료뿐 아니라 현재 메모리에 있는 기존 자료도 동일한 표기로 즉시 통일합니다.
                 saveToStorage();
                 renderAll();
 
