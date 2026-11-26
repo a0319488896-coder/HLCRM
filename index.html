@@ -4438,6 +4438,28 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             return excelText(row['매물특징 및 브리핑 포인트'] || row['기타']);
         }
 
+        // 엑셀의 사진 표기를 CRM의 사진상태 값으로 통일합니다.
+        // 빈칸은 기존 값을 유지할 수 있도록 null을 반환합니다.
+        function excelPhotoStatus(v) {
+            const t = excelText(v).trim().toUpperCase();
+            if (!t) return null;
+            if (['있음','O','○','Y','YES','1','가능','가능함','있다'].includes(t)) return '있음';
+            if (['없음','X','×','N','NO','0','불가능','불가','없다'].includes(t)) return '없음';
+            return excelText(v).trim();
+        }
+
+        // 엑셀의 주차 표기를 CRM에서 일관되게 표시합니다.
+        // '확인필요' 및 상세 설명은 그대로 보존합니다.
+        function excelParking(v) {
+            const raw = excelText(v).trim();
+            const t = raw.toUpperCase();
+            if (!raw) return '';
+            if (['가능','O','○','Y','YES','1','있음','있다'].includes(t)) return '가능';
+            if (['불가능','불가','X','×','N','NO','0','없음','없다'].includes(t)) return '불가능';
+            if (t === '확인필요') return '확인필요';
+            return raw;
+        }
+
         function convertExcelRow(row, type, sheetName, rowNumber) {
             const id = excelText(row['매물번호']);
             if (!id) return { error: `${sheetName} ${rowNumber}행: 매물번호가 없습니다.` };
@@ -4500,7 +4522,8 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 maintenance: excelText(maintenanceRaw),
                 premium: premium || 0,
                 moveIn: excelText(row['입주가능일']) || '협의',
-                parking: excelText(row['주차']),
+                parking: excelParking(row['주차']),
+                photoStatus: excelPhotoStatus(row['사진']),
                 rooms: excelText(row['방개수']),
                 bathrooms: excelText(row['화장실개수']),
                 elevator: excelElevator(row['엘베']),
@@ -4579,10 +4602,18 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 imported.forEach(p => {
                     const old = existingById.get(String(p.id));
                     if (old) {
-                        existingById.set(String(p.id), { ...old, ...p, photos: old.photos || [] });
+                        // 기존 실제 사진 파일은 절대 덮어쓰거나 삭제하지 않습니다.
+                        // 엑셀의 사진 열은 '사진상태'만 갱신합니다.
+                        const merged = { ...old, ...p, photos: old.photos || [] };
+                        if (p.photoStatus === null || p.photoStatus === undefined || p.photoStatus === '') {
+                            merged.photoStatus = old.photoStatus || ((old.photos || []).length ? '있음' : '없음');
+                        }
+                        existingById.set(String(p.id), merged);
                         updated++;
                     } else {
-                        existingById.set(String(p.id), { ...p, createdAt: new Date().toISOString(), memos: [] });
+                        const created = { ...p, createdAt: new Date().toISOString(), memos: [] };
+                        if (!created.photoStatus) created.photoStatus = '없음';
+                        existingById.set(String(p.id), created);
                         added++;
                     }
                 });
