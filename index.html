@@ -4141,6 +4141,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
                 <div class="bg-white border rounded-2xl divide-y text-sm">
                     <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">매물번호</span><span class="font-mono font-bold text-slate-800">${escapeHTML(p.id)}</span></div>
                     <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">광고 상태</span><span class="font-semibold text-sky-700">${escapeHTML((p.adStatus || '').trim() || '광고대기중')}</span></div>
+                    <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">관리비</span><span>${escapeHTML(String(p.maintenance ?? '').trim() || '없음')}</span></div>
                     <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">권리금</span><span>${Number(p.premium) > 0 ? formatMoney(p.premium) + '만' : '무권리'}</span></div>
                     <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">방 · 화장실</span><span>${escapeHTML(p.rooms || '-')} · ${escapeHTML(p.bathrooms || '-')}</span></div>
                     <div class="px-4 py-2.5 flex justify-between"><span class="text-slate-500">제한업종</span><span>${escapeHTML((p.restrictedUse || p.recommendedUse || '-'))}</span></div>
