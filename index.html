@@ -2302,7 +2302,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         let cloudSyncBusy = false;
         // 동기화 중 새 저장 요청이 들어와도 누락되지 않도록 직렬 처리합니다.
         let cloudSyncPending = false;
-        let cloudSyncPromise = null;
+        let cloudSyncPromise = Promise.resolve();
         let serverConfig = EMBEDDED_SHARED_CONFIG || {
             mode: 'gdrive', gdriveWebAppUrl: 'https://script.google.com/macros/s/AKfycbysAFI8JgXozefYXi9UXCW7-7O5sQ9mj7x1JMqmV3Mty7IVLUhLjm0XBc1yrul-Qt-x/exec', gdriveToken: '',
             supabaseUrl: '', supabaseAnonKey: '', supabaseBucket: 'hl-crm-photos',
@@ -3065,15 +3065,27 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         }
 
         function saveToStorage() {
+            // 매물 수정 때 전체 980건을 다시 전송하지 않습니다.
+            // 개별 매물의 클라우드 저장은 각 수정 함수에서 UPSERT_LISTING으로 처리합니다.
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
                 schedulePcFolderAutoSave();
-                if (cloudSyncReady && serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
-                    syncAllDataToGoogleSheets('properties');
-                }
             } catch (e) {
                 showToast('브라우저 저장 용량이 부족합니다.', 'error');
             }
+        }
+
+        async function replaceAllListingsOnServer() {
+            if (!cloudSyncReady || serverConfig.mode !== 'gdrive') return false;
+            const url = getActiveGdriveUrl();
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'REPLACE_LISTINGS', listings: properties })
+            });
+            const data = await res.json();
+            if (!res.ok || !data || data.ok !== true) throw new Error(data?.error || '매물 전체 저장 실패');
+            return true;
         }
 
         function openServerModal() {
@@ -3470,7 +3482,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             const url = getActiveGdriveUrl();
             if (!url) return { ok: false, message: '웹 앱 URL이 비어 있습니다.' };
             try {
-                const res = await fetch(url);
+                const res = await fetch(url, { cache: 'no-store' });
                 const data = await res.json();
                 if (!data.ok) throw new Error(data.message || '구글 시트 불러오기 실패');
                 applyGoogleDrivePayload(data, silent);
@@ -3488,7 +3500,7 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             box.classList.remove('hidden');
             try {
                 if (!url) throw new Error('구글 앱스 스크립트 웹 앱(/exec) 주소를 입력해 주세요.');
-                const res = await fetch(url);
+                const res = await fetch(url, { cache: 'no-store' });
                 const data = await res.json();
                 if (!data.ok) throw new Error(data.message || '연결 실패');
                 applyGoogleDrivePayload(data, true);
@@ -3507,63 +3519,47 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             const url = getActiveGdriveUrl();
             if (!url || !cloudSyncReady || serverConfig.mode !== 'gdrive') return false;
 
-            // 이미 전송 중이면 요청을 버리지 않고, 최신 데이터로 한 번 더 전송하도록 표시합니다.
-            cloudSyncPending = true;
-            if (cloudSyncPromise) return cloudSyncPromise;
+            // 변경된 종류만 전송합니다. 다른 PC의 최신 매물/고객/계약을 낡은 로컬 사본으로 덮지 않습니다.
+            let payload;
+            if (changedType === 'customers') {
+                payload = { action: 'SYNC_CUSTOMERS', customers: JSON.parse(JSON.stringify(customers || [])) };
+            } else if (changedType === 'contracts') {
+                payload = { action: 'SYNC_CONTRACTS', contracts: JSON.parse(JSON.stringify(contracts || [])) };
+            } else if (changedType === 'staff') {
+                payload = { action: 'SYNC_STAFF', staffAccounts: JSON.parse(JSON.stringify(staffAccounts || [])) };
+            } else if (changedType === 'admin') {
+                payload = { action: 'SYNC_ADMIN', adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '' };
+            } else {
+                payload = {
+                    action: 'BULK_SYNC',
+                    listings: JSON.parse(JSON.stringify(properties || [])),
+                    customers: JSON.parse(JSON.stringify(customers || [])),
+                    contracts: JSON.parse(JSON.stringify(contracts || [])),
+                    staffAccounts: JSON.parse(JSON.stringify(staffAccounts || [])),
+                    adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || ''
+                };
+            }
 
-            cloudSyncBusy = true;
-            cloudSyncPromise = (async () => {
-                let lastSuccess = false;
-                let latestChangedType = changedType;
-
-                while (cloudSyncPending) {
-                    cloudSyncPending = false;
-
-                    // 요청 직전에 최신 상태를 스냅샷으로 만듭니다.
-                    const payload = {
-                        action: 'BULK_SYNC',
-                        listings: JSON.parse(JSON.stringify(properties || [])),
-                        customers: JSON.parse(JSON.stringify(customers || [])),
-                        contracts: JSON.parse(JSON.stringify(contracts || [])),
-                        staffAccounts: JSON.parse(JSON.stringify(staffAccounts || [])),
-                        adminPassword: sharedAdminPassword || localStorage.getItem(ADMIN_PWD_KEY) || '',
-                        changedType: latestChangedType
-                    };
-
-                    const res = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-                    const data = await res.json();
-                    if (!data || data.ok !== true) {
-                        throw new Error(data?.error || data?.message || 'Google Sheets 저장 실패');
-                    }
-
-                    lastSuccess = true;
-                    // 전송 중 새 저장이 발생하면 cloudSyncPending이 true가 되어 반복 전송됩니다.
+            // 브라우저 안에서 요청 순서를 보장합니다. 서버 측 LockService와 함께 사용합니다.
+            const task = cloudSyncPromise.then(async () => {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok || !data || data.ok !== true) {
+                    throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
                 }
-
-                return lastSuccess;
-            })();
-
+                return true;
+            });
+            cloudSyncPromise = task.catch(() => false);
             try {
-                return await cloudSyncPromise;
+                return await task;
             } catch (err) {
                 console.error('Google Sheets sync failed:', err);
                 showToast(`공유 데이터 저장 실패: ${err.message}`, 'error');
                 return false;
-            } finally {
-                cloudSyncBusy = false;
-                cloudSyncPromise = null;
-
-                // 마지막 요청이 끝나는 시점에 새 변경이 들어온 경우도 놓치지 않습니다.
-                if (cloudSyncPending) {
-                    syncAllDataToGoogleSheets('queued');
-                }
             }
         }
 
@@ -3624,13 +3620,43 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         }
 
         async function syncPropertyWithServer(action, payloadObj) {
-            if (serverConfig.mode === 'supabase' && supabaseClient) {
-                if (action === 'UPSERT' && payloadObj.property) await upsertSinglePropertyToSupabase(payloadObj.property);
-                else if (action === 'DELETE' && payloadObj.propertyId) await deleteSinglePropertyFromSupabase(payloadObj.propertyId);
-            } else if (serverConfig.mode === 'gdrive' && serverConfig.gdriveWebAppUrl) {
-                await fetch(serverConfig.gdriveWebAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
-            } else if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
-                await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...payloadObj }) }).catch(() => {});
+            try {
+                if (serverConfig.mode === 'supabase' && supabaseClient) {
+                    if (action === 'UPSERT' && payloadObj.property) await upsertSinglePropertyToSupabase(payloadObj.property);
+                    else if (action === 'DELETE' && payloadObj.propertyId) await deleteSinglePropertyFromSupabase(payloadObj.propertyId);
+                    return true;
+                }
+                if (serverConfig.mode === 'gdrive' && getActiveGdriveUrl()) {
+                    let body;
+                    if (action === 'UPSERT' && payloadObj.property) {
+                        body = { action: 'UPSERT_LISTING', listing: payloadObj.property };
+                    } else if (action === 'DELETE' && payloadObj.propertyId) {
+                        body = { action: 'DELETE_LISTING', id: payloadObj.propertyId };
+                    } else {
+                        throw new Error('지원하지 않는 매물 저장 요청입니다.');
+                    }
+                    const res = await fetch(getActiveGdriveUrl(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify(body)
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data || data.ok !== true) throw new Error(data?.error || `HTTP ${res.status}`);
+                    return true;
+                }
+                if (serverConfig.mode === 'server' && serverConfig.baseUrl) {
+                    const res = await fetch(`${serverConfig.baseUrl}${serverConfig.listingsEndpoint}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, ...payloadObj })
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return true;
+                }
+                throw new Error('공유 저장소에 연결되어 있지 않습니다.');
+            } catch (err) {
+                console.error('매물 개별 저장 실패:', err);
+                showToast(`매물 서버 저장 실패: ${err.message}`, 'error');
+                return false;
             }
         }
 
@@ -4686,9 +4712,9 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
             reader.onload = (ev) => {
                 try {
                     const parsed = JSON.parse(ev.target.result);
-                    if (Array.isArray(parsed)) { properties = parsed; saveToStorage(); }
+                    if (Array.isArray(parsed)) { properties = parsed; saveToStorage(); void replaceAllListingsOnServer().catch(err => showToast(`매물 복원 서버 저장 실패: ${err.message}`, 'error')); }
                     else if (parsed && Array.isArray(parsed.properties)) {
-                        properties = parsed.properties; saveToStorage();
+                        properties = parsed.properties; saveToStorage(); void replaceAllListingsOnServer().catch(err => showToast(`매물 복원 서버 저장 실패: ${err.message}`, 'error'));
                         if (Array.isArray(parsed.customers)) { customers = parsed.customers; saveCustomersToStorage(); }
                         if (Array.isArray(parsed.contracts)) { contracts = parsed.contracts; saveContractsToStorage(); }
                     }
@@ -4709,7 +4735,9 @@ alter publication supabase_realtime add table public.hl_app_settings;</pre>
         function resetSampleData() {
             properties = JSON.parse(JSON.stringify(INITIAL_SAMPLE_PROPERTIES));
             customers = JSON.parse(JSON.stringify(INITIAL_SAMPLE_CUSTOMERS));
-            saveToStorage(); saveCustomersToStorage();
+            saveToStorage();
+            void replaceAllListingsOnServer().catch(err => showToast(`매물 초기화 서버 저장 실패: ${err.message}`, 'error'));
+            saveCustomersToStorage();
             closeDetailDrawer(); resetAllFilters(); renderCustomersList();
             showToast('초기 샘플 데이터로 복원되었습니다.');
         }
